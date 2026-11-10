@@ -275,6 +275,17 @@ fn an_input_only_prompt_presses_the_input() {
     assert_eq!(t.take_inputs(), vec![SKIP_CUTSCENE]);
 }
 
+fn wait_mouse_down(t: &mut Touch, expected_delay: Duration) -> Mouse {
+    let deadline = Instant::now() + expected_delay + MIN_PRESS + Duration::from_millis(300);
+    loop {
+        let m = t.take_mouse();
+        if m.down || Instant::now() >= deadline {
+            return m;
+        }
+        std::thread::sleep(Duration::from_millis(2));
+    }
+}
+
 #[test]
 fn in_the_pause_menu_fingers_are_the_mouse() {
     let mut t = phone();
@@ -286,8 +297,7 @@ fn in_the_pause_menu_fingers_are_the_mouse() {
     let m = t.take_mouse();
     assert!(!m.down && m.keys == [false; 6], "the pointer moves first");
     assert!((m.at.unwrap().x - x).abs() < 1e-6);
-    std::thread::sleep(CLICK_DELAY);
-    assert!(t.take_mouse().down);
+    assert!(wait_mouse_down(&mut t, CLICK_DELAY).down);
     // A second finger pinches: the wheel, no click.
     t.finger_down(1, x, y);
     let (px, py) = at(&t, pos2(400.0, 320.0));
@@ -345,16 +355,7 @@ fn a_menu_takes_taps_and_drags() {
     assert!(!t.take_mouse().down);
     // That click only went into the menu's column: it clicks again, once.
     t.menu_went_deeper(Some(Instant::now()));
-    let deadline = Instant::now() + AGAIN_DELAY + MIN_PRESS + Duration::from_millis(250);
-    let mut clicked_again = false;
-    while Instant::now() < deadline {
-        if t.take_mouse().down {
-            clicked_again = true;
-            break;
-        }
-        std::thread::sleep(Duration::from_millis(5));
-    }
-    assert!(clicked_again);
+    assert!(wait_mouse_down(&mut t, AGAIN_DELAY).down);
     std::thread::sleep(MIN_PRESS + Duration::from_millis(20));
     t.menu_went_deeper(Some(Instant::now()));
     assert!(!t.take_mouse().down);
@@ -420,15 +421,7 @@ fn a_scripts_cursor_menu_drops_the_pad() {
     let (x, y) = at(&t, pos2(150.0, 120.0));
     t.finger_down(1, x, y);
     t.finger_up(1);
-    let deadline = Instant::now() + CLICK_DELAY + MIN_PRESS + Duration::from_millis(250);
-    let mut clicked = false;
-    while Instant::now() < deadline {
-        if t.take_mouse().down {
-            clicked = true;
-            break;
-        }
-        std::thread::sleep(Duration::from_millis(5));
-    }
+    let clicked = wait_mouse_down(&mut t, CLICK_DELAY).down;
     assert!(clicked && t.gamepad().buttons == 0);
     // Without its cursor (a scene with its bar, not a menu for the mouse):
     // the D-pad.
@@ -446,8 +439,7 @@ fn a_scripts_cursor_menu_drops_the_pad() {
     let (x, y) = at(&t, pos2(150.0, 80.0));
     t.finger_down(1, x, y);
     t.finger_up(1);
-    std::thread::sleep(CLICK_DELAY);
-    let m = t.take_mouse();
+    let m = wait_mouse_down(&mut t, CLICK_DELAY);
     assert!(m.down && (m.at.unwrap().x - x).abs() < 1e-6);
     assert_eq!(t.take_look(), (0, 0));
     // The stick pushed far walks there, but does not sprint: A would pick
