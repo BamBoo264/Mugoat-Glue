@@ -199,6 +199,8 @@ pub fn run() -> Result<()> {
         _ => Mode::Story,
     };
     let last_benchmark = benchmark::last(&user_dir);
+    let mut touch = Touch::new();
+    touch.set_overrides(settings.touch_buttons.clone());
     let mut app = App {
         pads: pads::Pads::new(sdl.gamepad().map_err(|e| anyhow!("Tay cầm SDL lỗi: {e}"))?),
         mouse: sdl.mouse(),
@@ -219,7 +221,7 @@ pub fn run() -> Result<()> {
         user_dir,
         settings,
         ui: Ui::new(overlay),
-        touch: Touch::new(),
+        touch,
         touch_input: TOUCH,
         touch_shown: false,
         touch_mouse: Default::default(),
@@ -717,6 +719,9 @@ impl App {
             self.touch.haptics = self.settings.haptics;
             self.touch.camera_speed = self.settings.touch_camera;
             self.touch.aim_locked = glue5_runtime::input::aim_locked();
+            if self.touch.overrides() != &self.settings.touch_buttons {
+                self.touch.set_overrides(self.settings.touch_buttons.clone());
+            }
             let screen = ui::screen_size(&self.window);
             self.touch.layout(screen, ui::safe_rect(&self.window), self.settings.touch_size);
             self.touch.set_context(glue5_runtime::input::player_context());
@@ -857,6 +862,7 @@ impl App {
                 Action::ChooseGame => self.folder = Some(Pick::folder(&self.window)),
                 Action::FindGame => self.find_game(None),
                 Action::ResetGraphics => self.reset_graphics(),
+                Action::ApplyGraphics => self.apply_graphics(),
                 Action::JoinFriend { key, lobby } => {
                     if self.game.is_none() {
                         // GTA Online in the friend's lobby, then into its
@@ -911,7 +917,7 @@ impl App {
                 input.release_all();
                 glue5_mods::input::release_all();
             }
-            if matches!(page_before, Some(Page::Settings | Page::Servers | Page::Mods)) {
+            if matches!(page_before, Some(Page::Settings | Page::Servers | Page::Mods | Page::TouchEditor)) {
                 self.settings.save(&self.user_dir);
             }
         }
@@ -1047,8 +1053,10 @@ impl App {
             return Ok(());
         }
         let Some(screen) = self.screen.take() else { return Ok(()) };
-        // Graphics quality is the game's own (its menu); the low-memory
-        // profile only lowers it once, after which the menu has the last word.
+        // Áp dụng cấu hình đồ hoạ từ launcher (mặc định: Cực Thấp) nếu chưa được ghi.
+        if !self.settings.graphics_applied {
+            self.apply_graphics();
+        }
         if self.settings.low_memory && !self.settings.low_preset_written {
             match glue5_runtime::game_settings::apply_low_preset(&self.user_dir) {
                 Ok(()) => {
@@ -1205,6 +1213,23 @@ impl App {
         }
     }
 
+    /// Ghi cấu hình đồ hoạ đã chọn (Cực Thấp .. Cực Cao / Tuỳ Chỉnh) xuống `settings.xml`.
+    fn apply_graphics(&mut self) {
+        match glue5_runtime::game_settings::apply_custom(&self.user_dir, &self.settings.custom_graphics) {
+            Ok(()) => {
+                self.settings.graphics_applied = true;
+                self.settings.low_preset_written = true;
+                self.graphics_reset = false;
+                self.settings.save(&self.user_dir);
+                log::info!("graphics preset {:?} written to settings.xml", self.settings.graphics_preset);
+            }
+            Err(e) => {
+                log::warn!("cannot write graphics settings: {e}");
+                self.ui.note(format!("Không thể áp dụng đồ họa: {e}"));
+            }
+        }
+    }
+
     /// The game's graphics settings back to the engine's defaults (asked for
     /// on the start page).
     fn reset_graphics(&mut self) {
@@ -1212,8 +1237,8 @@ impl App {
             Ok(()) => {
                 log::info!("the game's graphics settings: back to the defaults");
                 self.graphics_reset = true;
-                // The low-memory profile lowers them again at the next start.
                 self.settings.low_preset_written = false;
+                self.settings.graphics_applied = true;
                 self.settings.save(&self.user_dir);
             }
             Err(e) => self.ui.note(format!("Không thể đặt lại đồ họa: {e}")),

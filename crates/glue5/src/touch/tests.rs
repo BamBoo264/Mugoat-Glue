@@ -746,3 +746,51 @@ fn an_engine_warning_shows_its_buttons_alone() {
     t.set_game(Vec::new(), None);
     assert!(t.buttons().is_empty());
 }
+
+#[test]
+fn touch_custom_overrides_move_resize_fade_clamp_and_drag() {
+    let mut t = phone();
+    let default_fire = t.buttons().into_iter().find(|b| b.icon == "fire").expect("default fire");
+    let default_r = default_fire.radius;
+
+    // 1. Tuỳ chỉnh kích cỡ (1.6x), vị trí và độ mờ cho nút Bắn + Cần di chuyển.
+    let mut overrides = std::collections::BTreeMap::new();
+    overrides.insert(
+        "foot:fire".to_string(),
+        crate::settings::ButtonOverride { offset: [-0.25, -0.15], size: 1.6, opacity: 0.25 },
+    );
+    overrides.insert(
+        "move_stick".to_string(),
+        crate::settings::ButtonOverride { offset: [0.1, -0.1], size: 1.4, opacity: 0.35 },
+    );
+    t.set_overrides(overrides.clone());
+
+    let custom_fire = t.buttons().into_iter().find(|b| b.icon == "fire").expect("custom fire");
+    assert!((custom_fire.radius - default_r * 1.6).abs() < 1e-3);
+    assert!((custom_fire.opacity - 0.25).abs() < 1e-4);
+    assert_ne!(custom_fire.at, default_fire.at);
+    assert!(t.area.contains_rect(custom_fire.rect()), "nút vẫn nằm gọn trong safe area");
+
+    // Chạm đúng vào tâm mới của nút Bắn phải kích hoạt R2 dù lệch xa tâm gốc.
+    let (nx, ny) = at(&t, custom_fire.at);
+    t.finger_down(1, nx, ny);
+    assert_eq!(t.gamepad().r2, 1.0);
+    t.finger_up(1);
+
+    // Kiểm tra hệ số độ mờ riêng thực sự làm giảm alpha của Look (không bị ghim ở mức 0.75).
+    let base_look = Look::new(1.0, 1.0, Character::Franklin);
+    let faded_look = base_look.with_button_opacity(0.2);
+    assert!(faded_look.icon.a() < base_look.icon.a() / 2);
+
+    // 2. Kéo nút vượt ra ngoài biên phải luôn bị kẹp sát vào vùng an toàn.
+    let ctrls = t.editable_controls(EditorLayout::OnFoot);
+    assert!(ctrls.iter().any(|c| c.id == "move_stick" && c.label == "Cần di chuyển"));
+    let fire_ctrl = ctrls.iter().find(|c| c.id == "foot:fire").unwrap();
+    let mut fire_ov = *overrides.get("foot:fire").unwrap();
+    t.drag_control(fire_ctrl, &mut fire_ov, vec2(5000.0, 5000.0));
+    overrides.insert("foot:fire".into(), fire_ov);
+    t.set_overrides(overrides);
+    let clamped_fire = t.buttons().into_iter().find(|b| b.icon == "fire").unwrap();
+    assert!(clamped_fire.at.x <= t.area.max.x - clamped_fire.radius + 0.5);
+    assert!(clamped_fire.at.y <= t.area.max.y - clamped_fire.radius + 0.5);
+}

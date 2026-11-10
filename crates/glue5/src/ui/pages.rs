@@ -9,6 +9,7 @@ use crate::settings::{
     self, Corner, OverlayDetail, PerfOverlay, RENDER_SCALES, Settings, Source, TouchAim, TouchMode, Upscaling,
 };
 use crate::sharing::State as Sharing;
+use glue5_runtime::game_settings::GraphicsPreset;
 use glue5_stream::Phase;
 use egui::{Align, Align2, Color32, Id, Layout, Rect, RichText, Sense, Stroke, StrokeKind, UiBuilder, pos2, vec2};
 
@@ -745,7 +746,12 @@ pub(super) fn settings_page(
 ) -> bool {
     sheet(ctx, "settings-window", "CÀI ĐẶT", |ui| {
         let scale = theme::density(ui);
-        let tabs = [(SettingsTab::Video, "HIỂN THỊ"), (SettingsTab::Controls, "ĐIỀU KHIỂN"), (SettingsTab::Game, "TRÒ CHƠI")];
+        let tabs = [
+            (SettingsTab::Video, "HIỂN THỊ"),
+            (SettingsTab::Graphics, "ĐỒ HOẠ"),
+            (SettingsTab::Controls, "ĐIỀU KHIỂN"),
+            (SettingsTab::Game, "TRÒ CHƠI"),
+        ];
         segmented(ui, tab, &tabs, 40.0 * scale);
         ui.add_space(10.0 * scale);
         if let Some(note) = note {
@@ -933,6 +939,7 @@ fn settings_items(
                 gpu_driver(ui, settings, drivers, started.is_none(), actions);
             }
         }
+        SettingsTab::Graphics => graphics_tab(ui, settings, status, actions),
         SettingsTab::Controls => {
             setting(ui, "Nút cảm ứng", Control::Choice, None, |ui| {
                 choice(
@@ -942,6 +949,19 @@ fn settings_items(
                 )
             })
             .on_hover_text("Tự hiện trên màn hình cảm ứng và ẩn khi dùng tay cầm hoặc bàn phím.");
+            setting(
+                ui,
+                "Tuỳ chỉnh nút thao tác",
+                Control::Action,
+                Some("Kéo vị trí, cỡ và độ mờ từng nút"),
+                |ui| {
+                    let open = action_button(ui, "Chỉnh sửa");
+                    if open.clicked() {
+                        *go = Some(Some(Page::TouchEditor));
+                    }
+                    open
+                },
+            );
             setting(ui, "Kích thước", Control::Slider, None, |ui| {
                 slider(ui, &mut settings.touch_size, 0.7..=1.5, 0.1, "×", 1)
             });
@@ -1059,6 +1079,251 @@ fn settings_items(
             });
         }
     }
+}
+
+/// Nội dung tab ĐỒ HOẠ: 5 preset cân bằng sẵn (Cực Thấp .. Cực Cao) và Tuỳ Chỉnh.
+fn graphics_tab(ui: &mut egui::Ui, settings: &mut Settings, status: &Status, actions: &mut Vec<Action>) {
+    let scale = theme::density(ui);
+    let win_h = if status.window.1 > 0 { status.window.1 } else { 1170 };
+    let presets = [
+        (GraphicsPreset::UltraLow, "Cực Thấp", "Nhẹ nhất · 480p"),
+        (GraphicsPreset::Low, "Thấp", "Ổn định · 576p"),
+        (GraphicsPreset::Medium, "Trung Bình", "Cân bằng · 720p"),
+        (GraphicsPreset::High, "Cao", "Sắc nét · 900p"),
+        (GraphicsPreset::Ultra, "Cực Cao", "Tối đa · 100%"),
+        (GraphicsPreset::Custom, "Tuỳ Chỉnh", "Mở cài đặt chi tiết"),
+    ];
+
+    egui::Frame::new()
+        .fill(theme::CARD)
+        .stroke(Stroke::new(1.0, theme::BORDER))
+        .corner_radius((16.0 * scale) as u8)
+        .inner_margin((14.0 * scale) as i8)
+        .show(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.label(RichText::new("Mức cấu hình đồ hoạ").strong().color(theme::TEXT));
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    let note = if status.started.is_some() {
+                        "Áp dụng ở lần khởi động tới"
+                    } else {
+                        "Mặc định: Cực Thấp"
+                    };
+                    ui.label(RichText::new(note).small().color(theme::MUTED));
+                });
+            });
+            ui.add_space(8.0 * scale);
+            let cols = if ui.available_width() >= 360.0 * scale { 3 } else { 2 };
+            let gap = 8.0 * scale;
+            let card_w = ((ui.available_width() - gap * (cols as f32 - 1.0)) / cols as f32).max(90.0);
+            let card_h = 54.0 * scale;
+            for chunk in presets.chunks(cols) {
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = gap;
+                    for &(preset, title, sub) in chunk {
+                        if preset_tile(ui, title, sub, settings.graphics_preset == preset, vec2(card_w, card_h), scale)
+                            .clicked()
+                        {
+                            if preset == GraphicsPreset::Custom {
+                                settings.graphics_preset = GraphicsPreset::Custom;
+                                settings.graphics_applied = false;
+                            } else {
+                                settings.apply_graphics_preset(preset, win_h);
+                            }
+                            actions.push(Action::ApplyGraphics);
+                        }
+                    }
+                });
+                ui.add_space(gap);
+            }
+        });
+
+    if settings.graphics_preset != GraphicsPreset::Custom {
+        let g = &settings.custom_graphics;
+        let tex = ["Thấp", "Cao", "Rất cao"][g.texture_quality.min(2) as usize];
+        let shd = ["Tắt", "Bình thường", "Cao", "Rất cao"][g.shadow_quality.min(3) as usize];
+        let (rw, rh) = settings::render_size(status.window, settings.render_scale(), settings.low_memory);
+        let summary = format!(
+            "Vân bề mặt: {tex} · Đổ bóng: {shd} · MSAA {}× · Phân giải: {rw}×{rh}",
+            g.msaa
+        );
+        setting(ui, "Thông số đang áp dụng", Control::Action, Some(&summary), |ui| {
+            if action_button(ui, "Tuỳ Chỉnh").clicked() {
+                settings.graphics_preset = GraphicsPreset::Custom;
+                settings.graphics_applied = false;
+                actions.push(Action::ApplyGraphics);
+            }
+        });
+    } else {
+        let g = &mut settings.custom_graphics;
+        let mut changed = false;
+
+        ui.add_space(4.0 * scale);
+        ui.label(theme::heading("CHẤT LƯỢNG HÌNH ẢNH", 15.0 * scale).color(theme::ACCENT));
+
+        changed |= setting(ui, "Vân bề mặt (Texture)", Control::Choice, None, |ui| {
+            choice(ui, &mut g.texture_quality, &[(0, "Thấp"), (1, "Cao"), (2, "Rất cao")])
+        })
+        .changed();
+        changed |= setting(ui, "Đổ bóng (Shadow)", Control::Choice, None, |ui| {
+            choice(ui, &mut g.shadow_quality, &[(0, "Tắt"), (1, "Bình thường"), (2, "Cao"), (3, "Rất cao")])
+        })
+        .changed();
+        changed |= setting(ui, "Làm mềm bóng", Control::Choice, None, |ui| {
+            choice(ui, &mut g.soft_shadows, &[(0, "Sắc nét"), (1, "Mềm"), (2, "Rất mềm"), (3, "Siêu mềm")])
+        })
+        .changed();
+        changed |= setting(ui, "Đổ bóng động (Shader)", Control::Choice, None, |ui| {
+            choice(ui, &mut g.shader_quality, &[(0, "Thấp"), (1, "Cao"), (2, "Rất cao")])
+        })
+        .changed();
+        changed |= setting(ui, "Chất lượng phản chiếu", Control::Choice, None, |ui| {
+            choice(ui, &mut g.reflection_quality, &[(0, "Thấp"), (1, "Cao"), (2, "Rất cao"), (3, "Cực cao")])
+        })
+        .changed();
+        changed |= setting(ui, "Hiệu ứng hậu kỳ (PostFX)", Control::Choice, None, |ui| {
+            choice(ui, &mut g.postfx, &[(0, "Thấp"), (1, "Cao"), (2, "Rất cao"), (3, "Cực cao")])
+        })
+        .changed();
+        changed |= setting(ui, "Chất lượng nước", Control::Choice, None, |ui| {
+            choice(ui, &mut g.water_quality, &[(0, "Thấp"), (1, "Cao"), (2, "Rất cao")])
+        })
+        .changed();
+        changed |= setting(ui, "Hiệu ứng hạt", Control::Choice, None, |ui| {
+            choice(ui, &mut g.particle_quality, &[(0, "Thấp"), (1, "Cao"), (2, "Rất cao")])
+        })
+        .changed();
+        changed |= setting(ui, "Mật độ cỏ", Control::Choice, None, |ui| {
+            choice(ui, &mut g.grass_quality, &[(0, "Thấp"), (1, "Cao"), (2, "Rất cao"), (3, "Cực cao")])
+        })
+        .changed();
+        changed |= setting(ui, "Đổ khối (Tessellation)", Control::Choice, None, |ui| {
+            choice(ui, &mut g.tessellation, &[(0, "Tắt"), (1, "Bình thường"), (2, "Cao"), (3, "Rất cao")])
+        })
+        .changed();
+
+        ui.add_space(4.0 * scale);
+        ui.label(theme::heading("KHỬ RĂNG CƯA & ÁNH SÁNG", 15.0 * scale).color(theme::ACCENT));
+
+        changed |= setting(ui, "Khử răng cưa FXAA", Control::Toggle, None, |ui| toggle(ui, &mut g.fxaa)).changed();
+        changed |= setting(ui, "Khử răng cưa MSAA", Control::Choice, None, |ui| {
+            choice(ui, &mut g.msaa, &[(0, "Tắt"), (2, "2×"), (4, "4×"), (8, "8×")])
+        })
+        .changed();
+        changed |= setting(ui, "Khử răng cưa phản chiếu", Control::Choice, None, |ui| {
+            choice(ui, &mut g.reflection_msaa, &[(0, "Tắt"), (2, "2×"), (4, "4×"), (8, "8×")])
+        })
+        .changed();
+        changed |= setting(ui, "Lọc bất đẳng hướng (AF)", Control::Choice, None, |ui| {
+            choice(ui, &mut g.anisotropic, &[(0, "Tắt"), (2, "2×"), (4, "4×"), (8, "8×"), (16, "16×")])
+        })
+        .changed();
+        changed |= setting(ui, "Đổ bóng môi trường (SSAO)", Control::Choice, None, |ui| {
+            choice(ui, &mut g.ssao, &[(0, "Tắt"), (1, "Bình thường"), (2, "Cao")])
+        })
+        .changed();
+        changed |= setting(ui, "Ánh sáng sương mù", Control::Toggle, None, |ui| toggle(ui, &mut g.fog_volumes)).changed();
+        changed |= setting(ui, "Độ sâu trường ảnh (DoF)", Control::Toggle, None, |ui| toggle(ui, &mut g.dof)).changed();
+        changed |= setting(ui, "Mờ chuyển động", Control::Slider, None, |ui| {
+            slider(ui, &mut g.motion_blur, 0.0..=1.0, 0.05, "%", 0)
+        })
+        .changed();
+
+        ui.add_space(4.0 * scale);
+        ui.label(theme::heading("MẬT ĐỘ & TẦM NHÌN NÂNG CAO", 15.0 * scale).color(theme::ACCENT));
+
+        changed |= setting(ui, "Mật độ người & xe", Control::Slider, None, |ui| {
+            slider(ui, &mut g.city_density, 0.0..=1.0, 0.05, "%", 0)
+        })
+        .changed();
+        changed |= setting(ui, "Đa dạng người đi bộ", Control::Slider, None, |ui| {
+            slider(ui, &mut g.ped_variety, 0.0..=1.0, 0.05, "%", 0)
+        })
+        .changed();
+        changed |= setting(ui, "Đa dạng phương tiện", Control::Slider, None, |ui| {
+            slider(ui, &mut g.vehicle_variety, 0.0..=1.0, 0.05, "%", 0)
+        })
+        .changed();
+        changed |= setting(ui, "Tầm nhìn chi tiết (LOD)", Control::Slider, None, |ui| {
+            slider(ui, &mut g.lod_scale, 0.0..=1.0, 0.05, "%", 0)
+        })
+        .changed();
+        changed |= setting(ui, "Tầm nhìn mở rộng", Control::Slider, None, |ui| {
+            slider(ui, &mut g.max_lod_scale, 0.0..=1.0, 0.05, "%", 0)
+        })
+        .changed();
+        changed |= setting(ui, "Khoảng cách đổ bóng", Control::Slider, None, |ui| {
+            slider(ui, &mut g.shadow_distance, 0.5..=2.0, 0.05, "×", 2)
+        })
+        .changed();
+        changed |= setting(ui, "Bóng đổ dài", Control::Toggle, None, |ui| toggle(ui, &mut g.long_shadows)).changed();
+        changed |= setting(ui, "Bóng siêu nét", Control::Toggle, None, |ui| toggle(ui, &mut g.ultra_shadows)).changed();
+        changed |= setting(ui, "Tải nét cao khi bay", Control::Toggle, None, |ui| toggle(ui, &mut g.hd_flight)).changed();
+
+        if changed {
+            settings.graphics_applied = false;
+            actions.push(Action::ApplyGraphics);
+        }
+    }
+
+    if status.started.is_none() {
+        setting(
+            ui,
+            "Đặt lại đồ họa",
+            Control::Action,
+            Some("Đưa đồ hoạ và độ phân giải về mặc định Cực Thấp"),
+            |ui| {
+                let b = action_button(ui, "Về Cực Thấp");
+                if b.clicked() {
+                    settings.apply_graphics_preset(GraphicsPreset::UltraLow, win_h);
+                    actions.push(Action::ApplyGraphics);
+                }
+                b
+            },
+        );
+    }
+}
+
+fn preset_tile(
+    ui: &mut egui::Ui,
+    title: &str,
+    subtitle: &str,
+    selected: bool,
+    size: egui::Vec2,
+    scale: f32,
+) -> egui::Response {
+    let (rect, response) = ui.allocate_exact_size(size, Sense::click());
+    let hovered = response.hovered() || response.has_focus();
+    let fill = if selected {
+        theme::ACCENT_SOFT
+    } else if hovered {
+        theme::CARD_HOVER
+    } else {
+        theme::SURFACE
+    };
+    let stroke = if selected {
+        Stroke::new(1.8, theme::ACCENT)
+    } else if hovered {
+        Stroke::new(1.0, theme::BORDER_STRONG)
+    } else {
+        Stroke::new(1.0, theme::BORDER)
+    };
+    ui.painter().rect(rect, 12.0 * scale, fill, stroke, StrokeKind::Inside);
+    let title_color = if selected { theme::ACCENT } else { theme::TEXT };
+    ui.painter().text(
+        pos2(rect.center().x, rect.center().y - 8.5 * scale),
+        Align2::CENTER_CENTER,
+        title,
+        egui::FontId::new(14.5 * scale, egui::FontFamily::Name("condensed".into())),
+        title_color,
+    );
+    ui.painter().text(
+        pos2(rect.center().x, rect.center().y + 10.5 * scale),
+        Align2::CENTER_CENTER,
+        subtitle,
+        egui::FontId::proportional(11.0 * scale),
+        if selected { theme::TEXT } else { theme::MUTED },
+    );
+    focus(response)
 }
 
 /// The GPU driver the renderer opens at launch: the phone's or one the user
@@ -1180,7 +1445,7 @@ mod tests {
             theme::install(&ctx);
             let screen = Rect::from_min_size(Pos2::ZERO, size);
             let mut settings = Settings::default();
-            for tab in [SettingsTab::Video, SettingsTab::Controls, SettingsTab::Game] {
+            for tab in [SettingsTab::Video, SettingsTab::Graphics, SettingsTab::Controls, SettingsTab::Game] {
                 let mut tab = tab;
                 for _ in 0..4 {
                     let mut output = ctx.run_ui(
@@ -1215,6 +1480,68 @@ mod tests {
                 assert!(safe.contains_rect(window), "{size:?}: {window:?} outside {safe:?}");
                 assert!(window.center().distance(safe.center()) < 2.0, "window not centered: {window:?}, {safe:?}");
             }
+            // Kiểm tra riêng chế độ Tuỳ Chỉnh mở toàn bộ thông số chi tiết vẫn gọn trong vùng an toàn.
+            settings.graphics_preset = GraphicsPreset::Custom;
+            let mut tab = SettingsTab::Graphics;
+            for _ in 0..3 {
+                let mut output = ctx.run_ui(
+                    egui::RawInput {
+                        screen_rect: Some(screen),
+                        safe_area_insets: Some(SafeAreaInsets(egui::epaint::MarginF32 {
+                            top: 24.0,
+                            bottom: 16.0,
+                            left: 8.0,
+                            right: 8.0,
+                        })),
+                        ..Default::default()
+                    },
+                    |root| {
+                        settings_page(
+                            root.ctx(),
+                            &mut settings,
+                            &status(),
+                            None,
+                            &mut tab,
+                            &mut None,
+                            &mut Vec::new(),
+                            &mut None,
+                        );
+                    },
+                );
+                output.textures_delta.clear();
+            }
+            let window = ctx.memory(|m| m.area_rect(Id::new("settings-window"))).unwrap();
+            assert!(ctx.content_rect().contains_rect(window), "Custom graphics overflow on {size:?}");
+
+            // Kiểm tra trình tuỳ chỉnh nút thao tác nằm gọn trong vùng an toàn ở mọi cỡ màn hình.
+            let mut preview = crate::touch::Touch::new();
+            let mut editor_state = crate::ui::touch_editor::TouchEditorState::default();
+            for _ in 0..3 {
+                let mut output = ctx.run_ui(
+                    egui::RawInput {
+                        screen_rect: Some(screen),
+                        safe_area_insets: Some(SafeAreaInsets(egui::epaint::MarginF32 {
+                            top: 24.0,
+                            bottom: 16.0,
+                            left: 8.0,
+                            right: 8.0,
+                        })),
+                        ..Default::default()
+                    },
+                    |root| {
+                        crate::ui::touch_editor::touch_editor_page(
+                            root.ctx(),
+                            &mut settings,
+                            false,
+                            &mut preview,
+                            &mut editor_state,
+                        );
+                    },
+                );
+                output.textures_delta.clear();
+            }
+            let bar = ctx.memory(|m| m.area_rect(Id::new("touch-editor-bar"))).unwrap();
+            assert!(ctx.content_rect().contains_rect(bar), "Touch editor bar outside {size:?}: {bar:?}");
         }
     }
     #[test]
@@ -1567,5 +1894,116 @@ mod tests {
         .textures_delta
         .clear();
         assert!(matches!(actions[..], [crate::ui::Action::FindServers]));
+    }
+
+    #[test]
+    fn graphics_tab_order_presets_custom_and_touch_editor() {
+        let ctx = egui::Context::default();
+        theme::install(&ctx);
+        let mut settings = Settings::default();
+        assert_eq!(settings.graphics_preset, GraphicsPreset::UltraLow);
+        let mut tab = SettingsTab::Video;
+        let screen = Rect::from_min_size(Pos2::ZERO, vec2(1200.0, 800.0));
+        let click = |at: Pos2| {
+            vec![
+                egui::Event::PointerMoved(at),
+                egui::Event::PointerButton {
+                    pos: at,
+                    button: egui::PointerButton::Primary,
+                    pressed: true,
+                    modifiers: Default::default(),
+                },
+                egui::Event::PointerButton {
+                    pos: at,
+                    button: egui::PointerButton::Primary,
+                    pressed: false,
+                    modifiers: Default::default(),
+                },
+            ]
+        };
+
+        let find_text = |output: &egui::FullOutput, needle: &str| -> Option<Pos2> {
+            output.shapes.iter().find_map(|s| match &s.shape {
+                egui::Shape::Text(t) if t.galley.text() == needle => Some(t.visual_bounding_rect().center()),
+                _ => None,
+            })
+        };
+
+        // 1. Kiểm tra thứ tự 4 tab: HIỂN THỊ -> ĐỒ HOẠ -> ĐIỀU KHIỂN -> TRÒ CHƠI.
+        let mut output = None;
+        for _ in 0..3 {
+            let mut o = ctx.run_ui(egui::RawInput { screen_rect: Some(screen), ..Default::default() }, |root| {
+                settings_page(root.ctx(), &mut settings, &status(), None, &mut tab, &mut None, &mut Vec::new(), &mut None);
+            });
+            o.textures_delta.clear();
+            output = Some(o);
+        }
+        let out = output.as_ref().unwrap();
+        let x_video = find_text(out, "HIỂN THỊ").expect("HIỂN THỊ").x;
+        let x_gfx = find_text(out, "ĐỒ HOẠ").expect("ĐỒ HOẠ").x;
+        let x_ctrl = find_text(out, "ĐIỀU KHIỂN").expect("ĐIỀU KHIỂN").x;
+        let x_game = find_text(out, "TRÒ CHƠI").expect("TRÒ CHƠI").x;
+        assert!(x_video < x_gfx && x_gfx < x_ctrl && x_ctrl < x_game);
+
+        // 2. Bấm vào ĐỒ HOẠ, chọn preset Cao, rồi chọn Tuỳ Chỉnh để mở cài đặt chi tiết.
+        let gfx_pos = find_text(out, "ĐỒ HOẠ").unwrap();
+        let mut actions = Vec::new();
+        let mut out = ctx.run_ui(
+            egui::RawInput { screen_rect: Some(screen), events: click(gfx_pos), ..Default::default() },
+            |root| {
+                settings_page(root.ctx(), &mut settings, &status(), None, &mut tab, &mut None, &mut actions, &mut None);
+            },
+        );
+        out.textures_delta.clear();
+        assert!(matches!(tab, SettingsTab::Graphics));
+        for p in ["Cực Thấp", "Thấp", "Trung Bình", "Cao", "Cực Cao", "Tuỳ Chỉnh"] {
+            assert!(find_text(&out, p).is_some(), "missing preset {p}");
+        }
+
+        let high_pos = find_text(&out, "Cao").unwrap();
+        let mut actions = Vec::new();
+        let mut out = ctx.run_ui(
+            egui::RawInput { screen_rect: Some(screen), events: click(high_pos), ..Default::default() },
+            |root| {
+                settings_page(root.ctx(), &mut settings, &status(), None, &mut tab, &mut None, &mut actions, &mut None);
+            },
+        );
+        out.textures_delta.clear();
+        assert_eq!(settings.graphics_preset, GraphicsPreset::High);
+        assert!(actions.iter().any(|a| matches!(a, Action::ApplyGraphics)));
+
+        let custom_pos = find_text(&out, "Tuỳ Chỉnh").unwrap();
+        let mut out = ctx.run_ui(
+            egui::RawInput { screen_rect: Some(screen), events: click(custom_pos), ..Default::default() },
+            |root| {
+                settings_page(root.ctx(), &mut settings, &status(), None, &mut tab, &mut None, &mut Vec::new(), &mut None);
+            },
+        );
+        out.textures_delta.clear();
+        assert_eq!(settings.graphics_preset, GraphicsPreset::Custom);
+        assert!(find_text(&out, "Vân bề mặt (Texture)").is_some());
+
+        // 3. Kiểm tra nút Tuỳ chỉnh nút thao tác trong tab ĐIỀU KHIỂN mở đúng Page::TouchEditor.
+        let ctrl_pos = find_text(&out, "ĐIỀU KHIỂN").unwrap();
+        let mut out = ctx.run_ui(
+            egui::RawInput { screen_rect: Some(screen), events: click(ctrl_pos), ..Default::default() },
+            |root| {
+                settings_page(root.ctx(), &mut settings, &status(), None, &mut tab, &mut None, &mut Vec::new(), &mut None);
+            },
+        );
+        out.textures_delta.clear();
+        assert!(matches!(tab, SettingsTab::Controls));
+        assert!(find_text(&out, "Tuỳ chỉnh nút thao tác").is_some());
+        let edit_pos = find_text(&out, "Chỉnh sửa").expect("nút Chỉnh sửa");
+        let mut go = None;
+        ctx.run_ui(
+            egui::RawInput { screen_rect: Some(screen), events: click(edit_pos), ..Default::default() },
+            |root| {
+                settings_page(root.ctx(), &mut settings, &status(), None, &mut tab, &mut None, &mut Vec::new(), &mut go);
+            },
+        )
+        .textures_delta
+        .clear();
+        assert_eq!(go, Some(Some(Page::TouchEditor)));
     }
 }

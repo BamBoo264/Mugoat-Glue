@@ -30,6 +30,7 @@ mod pages;
 mod perf;
 mod servers;
 mod theme;
+mod touch_editor;
 mod widgets;
 use credits::credits_page;
 use friends::{FriendsPage, friends_page};
@@ -37,6 +38,7 @@ use mods::{ModsPage, mods_page};
 pub use mods::StudioInfo;
 use pages::{settings_page, start_page};
 use servers::{ServersPage, servers_page};
+use touch_editor::{TouchEditorState, touch_editor_page};
 
 use crate::touch::Touch;
 
@@ -46,6 +48,8 @@ pub enum Page {
     /// Before the game: its files, the ways into it, Settings, Credits.
     Start,
     Settings,
+    /// Trình chỉnh sửa vị trí, kích cỡ và độ mờ nút thao tác cảm ứng.
+    TouchEditor,
     /// Who made what the application is built on, and their licenses.
     Credits,
     /// The player's friend code, requests, friends.
@@ -79,6 +83,8 @@ pub enum Action {
     FindGame,
     /// The game's graphics settings back to the engine's defaults.
     ResetGraphics,
+    /// Áp dụng preset đồ hoạ hoặc thiết lập tuỳ chỉnh vào `settings.xml`.
+    ApplyGraphics,
     /// Join a friend (by its key) playing GTA Online in `lobby`, from the
     /// start page.
     JoinFriend { key: String, lobby: String },
@@ -235,6 +241,7 @@ const WARN: Color32 = Color32::from_rgb(240, 180, 100);
 enum SettingsTab {
     #[default]
     Video,
+    Graphics,
     Controls,
     Game,
 }
@@ -290,6 +297,9 @@ pub struct Ui {
     keyboard: f32,
     /// The settings button's icon.
     gear_icon: Option<egui::TextureHandle>,
+    /// Bố cục mẫu và trạng thái của trình tuỳ chỉnh nút thao tác.
+    touch_preview: Touch,
+    touch_editor: TouchEditorState,
 }
 
 /// A notification: as Social Club's, a title, a name and a line; the
@@ -347,6 +357,8 @@ impl Ui {
             text_rect: None,
             keyboard: 0.0,
             gear_icon,
+            touch_preview: Touch::new(),
+            touch_editor: TouchEditorState::default(),
         }
     }
 
@@ -454,7 +466,9 @@ impl Ui {
             Some(Page::Settings) => self.show(self.home),
             // Out of a field, or up a menu, first.
             Some(Page::Mods) if self.mods.back(&self.ctx) => self.repaint(),
-            Some(Page::Credits | Page::Friends | Page::Servers | Page::Mods) => self.show(self.behind),
+            Some(Page::Credits | Page::Friends | Page::Servers | Page::Mods | Page::TouchEditor) => {
+                self.show(self.behind)
+            }
             _ => {}
         }
     }
@@ -471,7 +485,9 @@ impl Ui {
         if self.page == Some(Page::Mods) && page != Some(Page::Mods) {
             self.mods.closed();
         }
-        let secondary = |p: Option<Page>| matches!(p, Some(Page::Credits | Page::Friends | Page::Servers | Page::Mods));
+        let secondary = |p: Option<Page>| {
+            matches!(p, Some(Page::Credits | Page::Friends | Page::Servers | Page::Mods | Page::TouchEditor))
+        };
         if secondary(page) && self.page != page {
             // One opened from another goes back where the first came from
             // (else back would go between the two for ever).
@@ -809,6 +825,10 @@ impl Ui {
             Some(Page::Servers) => back = servers_page(&ctx, &mut self.servers, settings, status, &mut actions),
             // Its X closes it, from inside a menu too (back goes up a menu).
             Some(Page::Mods) => go = mods_page(&ctx, &mut self.mods, settings, status).then_some(self.behind),
+            Some(Page::TouchEditor) => {
+                let started = status.started.is_some();
+                back = touch_editor_page(&ctx, settings, started, &mut self.touch_preview, &mut self.touch_editor);
+            }
             None => {}
         }
         let mut output = ctx.end_pass();

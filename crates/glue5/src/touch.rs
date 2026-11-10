@@ -36,7 +36,7 @@
 //! They make a [`Gamepad`] (and the camera a mouse's motion): the game plays
 //! as with a controller (its prompts, aim assist).
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::time::{Duration, Instant};
 
 use egui::{Color32, Painter, Pos2, Rect, Stroke, Vec2, pos2, vec2};
@@ -44,6 +44,7 @@ use glue5_runtime::input::{Activity, Character, Driving, Gamepad, PlayerContext,
 use glue5_runtime::prompts::{Pad, Prompt, SKIP_CUTSCENE};
 
 use crate::haptics;
+use crate::settings::ButtonOverride;
 
 /// Stick travel, in points (scaled with the controls).
 const STICK_RADIUS: f32 = 56.0;
@@ -442,6 +443,150 @@ const LOOK_GAIN: f32 = 16.0;
 /// lock instead.
 const LOCKED_SWIPE: f32 = 8.0;
 
+/// Các bố cục cảm ứng có thể chọn để xem trước và tuỳ chỉnh trong trình chỉnh sửa nút.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum EditorLayout {
+    #[default]
+    OnFoot,
+    Car,
+    Heli,
+    Plane,
+    Bicycle,
+    Parachute,
+}
+
+impl EditorLayout {
+    pub const ALL: [Self; 6] = [Self::OnFoot, Self::Car, Self::Heli, Self::Plane, Self::Bicycle, Self::Parachute];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::OnFoot => "Đi bộ",
+            Self::Car => "Xe hơi",
+            Self::Heli => "Trực thăng",
+            Self::Plane => "Máy bay",
+            Self::Bicycle => "Xe đạp",
+            Self::Parachute => "Nhảy dù",
+        }
+    }
+
+    fn actions(self) -> &'static [Action] {
+        match self {
+            Self::OnFoot => ON_FOOT,
+            Self::Car => CAR,
+            Self::Heli => HELI,
+            Self::Plane => PLANE,
+            Self::Bicycle => BICYCLE,
+            Self::Parachute => PARACHUTE,
+        }
+    }
+}
+
+/// Thông tin một nút (hoặc cần điều khiển) hiển thị trong trình tuỳ chỉnh nút.
+#[derive(Clone, Debug)]
+pub struct EditableControl {
+    pub id: String,
+    pub label: &'static str,
+    pub at: Pos2,
+    pub radius: f32,
+    pub base_at: Pos2,
+    pub base_radius: f32,
+    pub opacity: f32,
+    pub is_stick: bool,
+    pub icon: &'static str,
+    pub primary: bool,
+}
+
+fn layout_prefix(layout: &[Action]) -> &'static str {
+    if std::ptr::eq(layout, ON_FOOT) {
+        "foot"
+    } else if std::ptr::eq(layout, CAR) {
+        "car"
+    } else if std::ptr::eq(layout, BICYCLE) {
+        "bike"
+    } else if std::ptr::eq(layout, HELI) {
+        "heli"
+    } else if std::ptr::eq(layout, PLANE) {
+        "plane"
+    } else if std::ptr::eq(layout, SUBMARINE) {
+        "sub"
+    } else if std::ptr::eq(layout, PASSENGER) {
+        "pass"
+    } else if std::ptr::eq(layout, PARACHUTE) {
+        "chute"
+    } else if std::ptr::eq(layout, CUTSCENE) {
+        "cutscene"
+    } else if std::ptr::eq(layout, ALERT) {
+        "alert"
+    } else if std::ptr::eq(layout, SCRIPTED) {
+        "scripted"
+    } else {
+        "scene"
+    }
+}
+
+fn control_id(prefix: &str, a: &Action) -> String {
+    match a.icon {
+        "view" | "pause" | "phone" | "switch" => a.icon.to_string(),
+        other => format!("{prefix}:{other}"),
+    }
+}
+
+fn control_name_vi(prefix: &str, icon: &str) -> &'static str {
+    match icon {
+        "view" => "Góc nhìn",
+        "pause" => "Tạm dừng",
+        "phone" => "Điện thoại",
+        "switch" => "Đổi nhân vật",
+        "fire" => if matches!(prefix, "car" | "pass") { "Bắn từ xe" } else { "Bắn / Tấn công" },
+        "aim" => "Ngắm",
+        "jump" => "Nhảy",
+        "enter" => "Lên xe",
+        "melee" | "reload" => "Cận chiến / Nạp đạn",
+        "cover" => "Ẩn nấp",
+        "action" => "Tương tác",
+        "weapons" => "Vũ khí",
+        "special" | "drive-special" => "Kỹ năng",
+        "crouch" => "Cúi / Lẻn",
+        "throw" => "Ném",
+        "gas" => match prefix {
+            "bike" => "Đạp xe",
+            "heli" => "Bay lên",
+            "plane" => "Tăng ga",
+            "sub" => "Tiến",
+            _ => "Ga",
+        },
+        "brake" => match prefix {
+            "heli" => "Hạ độ cao",
+            "sub" => "Lùi",
+            "chute" => "Phanh",
+            _ => "Phanh / Lùi",
+        },
+        "exit" => "Xuống xe",
+        "handbrake" => "Phanh tay",
+        "horn" => "Còi xe",
+        "radio" => "Đài Radio",
+        "lights" => "Đèn xe",
+        "behind" => "Nhìn sau",
+        "bell" => "Chuông xe",
+        "yaw-left" => if prefix == "chute" { "Lệch trái" } else { "Xoay trái" },
+        "yaw-right" => if prefix == "chute" { "Lệch phải" } else { "Xoay phải" },
+        "landing-gear" => "Bánh đáp",
+        "rise" => "Nổi lên",
+        "dive" => "Lặn xuống",
+        "seat" => "Chuyển ghế",
+        "parachute" => "Mở dù",
+        "detach" => "Tháo dù",
+        "skip" => "Bỏ qua",
+        "check" => "Chọn",
+        "back" => "Quay lại",
+        "up" => "Lên",
+        "down" => "Xuống",
+        "left" => "Trái",
+        "right" => "Phải",
+        _ => "Nút",
+    }
+}
+
 /// A button shown now: a layout's, a phone key, or one of the game's
 /// prompts.
 #[derive(Clone, Debug)]
@@ -457,6 +602,8 @@ struct Button {
     primary: bool,
     /// The game asks for it now.
     asked: bool,
+    /// Hệ số độ mờ riêng của nút (`1.0` nếu không tuỳ chỉnh).
+    opacity: f32,
 }
 
 /// What a button is, so that a finger keeps it across frames.
@@ -547,6 +694,8 @@ pub struct Touch {
     /// next may be (a key's press and release each take a frame).
     steps: f32,
     next_step: Option<Instant>,
+    /// Tuỳ chỉnh vị trí, kích cỡ và độ mờ cho từng nút theo mã nút.
+    overrides: BTreeMap<String, ButtonOverride>,
     /// Direct touch: when the last tap clicked (it may click again, once).
     tapped: Option<Instant>,
     two: Option<TwoFingers>,
@@ -624,9 +773,20 @@ impl Touch {
             wheel: 0.0,
             steps: 0.0,
             next_step: None,
+            overrides: BTreeMap::new(),
             tapped: None,
             two: None,
         }
+    }
+
+    /// Cập nhật bảng tuỳ chỉnh nút thao tác.
+    pub fn set_overrides(&mut self, overrides: BTreeMap<String, ButtonOverride>) {
+        self.overrides = overrides;
+    }
+
+    /// Hiện trạng bảng tuỳ chỉnh nút đang dùng.
+    pub fn overrides(&self) -> &BTreeMap<String, ButtonOverride> {
+        &self.overrides
     }
 
     /// The window's size and safe area in points, and the controls' size
@@ -791,16 +951,18 @@ impl Touch {
     /// Every button shown now, where it is.
     fn buttons(&self) -> Vec<Button> {
         let s = self.scale;
-        let round = |key, at, a: &Action| Button {
+        let prefix = self.touch_layout().map(layout_prefix).unwrap_or("foot");
+        let round = |key, at, radius, opacity, a: &Action| Button {
             key,
             at,
-            radius: a.radius * s,
+            radius,
             icon: a.icon,
             bits: self.bits_of(a),
             input: a.input,
             kind: a.kind,
             primary: a.primary,
             asked: false,
+            opacity,
         };
         let phone = self.context.phone && self.has_stick();
         let keys = self.phone_keys();
@@ -813,19 +975,21 @@ impl Touch {
                 // Melee and reload are one button: what B does with what is
                 // in hand.
                 let icon = if a.icon == "melee" && self.context.gun { "reload" } else { a.icon };
-                let at = match a.at {
-                    At::MidTop(..) => self.pos(a.at),
+                let (base_at, move_pos) = match a.at {
+                    At::MidTop(..) => (self.pos(a.at), true),
                     _ if phone => beside
                         .next()
-                        .map_or(self.pos(a.at), |d| pos2(keys[4].x - d.x * s, self.area.max.y - d.y * s)),
-                    _ => self.pos(a.at),
+                        .map_or((self.pos(a.at), false), |d| (pos2(keys[4].x - d.x * s, self.area.max.y - d.y * s), false)),
+                    _ => (self.pos(a.at), true),
                 };
-                Button { icon, ..round(Key::Action(a), at, a) }
+                let id = control_id(prefix, a);
+                let (at, radius, opacity) = self.apply_override(&id, base_at, a.radius * s, move_pos);
+                Button { icon, ..round(Key::Action(a), at, radius, opacity, a) }
             })
             .collect();
         if phone {
             for (i, (a, at)) in PHONE_KEYS.iter().zip(keys).enumerate() {
-                out.push(round(Key::Phone(i), at, a));
+                out.push(round(Key::Phone(i), at, a.radius * s, 1.0, a));
             }
         }
         // The game's prompts: the button that does it is ringed (shown for
@@ -897,6 +1061,7 @@ impl Touch {
                 kind: Kind::Press,
                 primary: false,
                 asked: true,
+                opacity: 1.0,
             });
             if column {
                 at.y -= step;
@@ -965,8 +1130,130 @@ impl Touch {
         }
     }
 
+    fn clamp_center(&self, p: Pos2, radius: f32) -> Pos2 {
+        if self.area.width() <= 2.0 * radius || self.area.height() <= 2.0 * radius {
+            return pos2(
+                p.x.clamp(self.area.min.x, self.area.max.x),
+                p.y.clamp(self.area.min.y, self.area.max.y),
+            );
+        }
+        pos2(
+            p.x.clamp(self.area.min.x + radius, self.area.max.x - radius),
+            p.y.clamp(self.area.min.y + radius, self.area.max.y - radius),
+        )
+    }
+
+    fn apply_override(&self, id: &str, base_at: Pos2, base_radius: f32, move_pos: bool) -> (Pos2, f32, f32) {
+        let Some(ov) = self.overrides.get(id) else {
+            return (base_at, base_radius, 1.0);
+        };
+        let r = (base_radius * ov.size.clamp(0.5, 2.0)).max(6.0);
+        let at = if move_pos {
+            let shifted = base_at + vec2(ov.offset[0] * self.area.width(), ov.offset[1] * self.area.height());
+            self.clamp_center(shifted, r)
+        } else {
+            base_at
+        };
+        (at, r, ov.opacity.clamp(0.15, 1.0))
+    }
+
     fn stick_radius(&self) -> f32 {
-        STICK_RADIUS * self.scale
+        let mult = self.overrides.get("move_stick").map_or(1.0, |o| o.size.clamp(0.5, 2.0));
+        STICK_RADIUS * self.scale * mult
+    }
+
+    fn stick_rest(&self) -> Pos2 {
+        self.apply_override("move_stick", self.pos(MOVE_REST), self.stick_radius(), true).0
+    }
+
+    fn stick_opacity(&self) -> f32 {
+        self.overrides.get("move_stick").map_or(1.0, |o| o.opacity.clamp(0.15, 1.0))
+    }
+
+    /// Danh sách toàn bộ nút + cần di chuyển ở bố cục được chọn để chỉnh sửa vị trí/kích cỡ/độ mờ.
+    pub fn editable_controls(&self, layout: EditorLayout) -> Vec<EditableControl> {
+        let actions = layout.actions();
+        let prefix = layout_prefix(actions);
+        let mut out = Vec::with_capacity(actions.len() + 1);
+        let stick_base_r = STICK_RADIUS * self.scale;
+        let stick_base_at = self.pos(MOVE_REST);
+        let (stick_at, stick_r, stick_op) = self.apply_override("move_stick", stick_base_at, stick_base_r, true);
+        out.push(EditableControl {
+            id: "move_stick".into(),
+            label: "Cần di chuyển",
+            at: stick_at,
+            radius: stick_r,
+            base_at: stick_base_at,
+            base_radius: stick_base_r,
+            opacity: stick_op,
+            is_stick: true,
+            icon: "",
+            primary: false,
+        });
+        for a in actions {
+            let id = control_id(prefix, a);
+            let base_at = self.pos(a.at);
+            let base_radius = a.radius * self.scale;
+            let (at, radius, opacity) = self.apply_override(&id, base_at, base_radius, true);
+            out.push(EditableControl {
+                id,
+                label: control_name_vi(prefix, a.icon),
+                at,
+                radius,
+                base_at,
+                base_radius,
+                opacity,
+                is_stick: false,
+                icon: a.icon,
+                primary: a.primary,
+            });
+        }
+        out
+    }
+
+    /// Kéo nút theo delta màn hình (points) và tự giới hạn gọn trong vùng an toàn.
+    pub fn drag_control(
+        &self,
+        ctrl: &EditableControl,
+        ov: &mut ButtonOverride,
+        delta: Vec2,
+    ) {
+        let w = self.area.width().max(1.0);
+        let h = self.area.height().max(1.0);
+        let r = (ctrl.base_radius * ov.size.clamp(0.5, 2.0)).max(6.0);
+        let current = ctrl.base_at + vec2(ov.offset[0] * w, ov.offset[1] * h);
+        let clamped = self.clamp_center(current + delta, r);
+        ov.offset = [(clamped.x - ctrl.base_at.x) / w, (clamped.y - ctrl.base_at.y) / h];
+    }
+
+    /// Vẽ bản xem trước tương tác cho trình tuỳ chỉnh nút thao tác.
+    pub fn draw_editor_preview(
+        &self,
+        painter: &Painter,
+        base_opacity: f32,
+        layout: EditorLayout,
+        selected_id: Option<&str>,
+    ) {
+        let base_look = Look::new(base_opacity, self.scale, self.context.character);
+        let gold = Color32::from_rgb(240, 198, 92);
+        for c in &self.editable_controls(layout) {
+            let look = base_look.with_button_opacity(c.opacity);
+            let sel = selected_id == Some(c.id.as_str());
+            if c.is_stick {
+                let r = c.radius;
+                painter.circle(c.at, r, look.fill(sel), look.stroke(sel));
+                painter.circle_stroke(c.at, SPRINT_REACH * r, Stroke::new(look.width, look.line.gamma_multiply(0.5)));
+                painter.circle(c.at, r * 0.45, look.knob, look.stroke(sel));
+            } else {
+                let ring = if sel || c.primary { look.ring(sel) } else { look.stroke(false) };
+                painter.circle(c.at, c.radius, look.fill(sel), ring);
+                self.draw_icon(painter, &look, c.at, c.radius * 1.15, c.icon);
+            }
+            if sel {
+                painter.circle_stroke(c.at, c.radius + 5.0, Stroke::new(2.2, gold));
+                painter.circle_stroke(c.at, c.radius + 8.5, Stroke::new(1.0, gold.gamma_multiply(0.45)));
+            }
+        }
     }
 
     /// Where the controls shown now are (the stick where it rests, with its
@@ -979,7 +1266,7 @@ impl Touch {
         let mut out: Vec<Rect> = self.buttons().iter().map(Button::rect).collect();
         if self.has_stick() {
             let reach = if self.sprints() { SPRINT_REACH } else { 1.0 };
-            out.push(circle(self.pos(MOVE_REST), self.stick_radius() * reach));
+            out.push(circle(self.stick_rest(), self.stick_radius() * reach));
         }
         out
     }
@@ -1016,7 +1303,8 @@ impl Touch {
             return Finger::Button { key: b.key, bits: b.bits, input: b.input, kind: b.kind, origin: p, last: p };
         }
         let left = p.x < self.screen.x / 2.0;
-        if left && (self.has_stick() || self.is(SCRIPTED)) {
+        let on_stick = self.has_stick() && p.distance(self.stick_rest()) <= FOLLOW_REACH * self.stick_radius();
+        if on_stick || (left && (self.has_stick() || self.is(SCRIPTED))) {
             Finger::Move { origin: p, at: p }
         } else if self.is(SCRIPTED) {
             Finger::Look { origin: p, at: p }
@@ -1028,7 +1316,7 @@ impl Touch {
     /// Over play, a script's menu with its cursor takes a finger off the
     /// controls (and off the stick where it rests).
     fn takes_mouse(&self, p: Pos2) -> bool {
-        let stick = self.has_stick() && p.distance(self.pos(MOVE_REST)) <= FOLLOW_REACH * self.stick_radius();
+        let stick = self.has_stick() && p.distance(self.stick_rest()) <= FOLLOW_REACH * self.stick_radius();
         !stick && !self.buttons().iter().any(|b| b.hit(p))
     }
 
@@ -1369,6 +1657,7 @@ impl Touch {
                     kind: Kind::Press,
                     primary: *key == MenuKey::Enter,
                     asked: false,
+                    opacity: 1.0,
                 };
                 self.draw_button(painter, &look, &b, held);
             }
@@ -1376,23 +1665,25 @@ impl Touch {
         }
         for b in &self.buttons() {
             let held = self.fingers.values().any(|f| matches!(f, Finger::Button { key, .. } if *key == b.key));
-            self.draw_button(painter, &look, b, held);
+            let btn_look = look.with_button_opacity(b.opacity);
+            self.draw_button(painter, &btn_look, b, held);
         }
         // The sticks held, or at rest (on foot, with its sprint ring).
-        let rest = self.has_stick().then(|| self.pos(MOVE_REST));
+        let rest = self.has_stick().then(|| self.stick_rest());
+        let stick_look = look.with_button_opacity(self.stick_opacity());
         let mut moved = false;
         for f in self.fingers.values() {
             match *f {
                 Finger::Move { origin, at } => {
                     moved = true;
-                    self.draw_stick(painter, &look, origin, at, self.sprints());
+                    self.draw_stick(painter, &stick_look, origin, at, self.sprints());
                 }
                 Finger::Look { origin, at } => self.draw_stick(painter, &look, origin, at, false),
                 _ => {}
             }
         }
         if let (false, Some(rest)) = (moved, rest) {
-            self.draw_stick(painter, &look, rest, rest, self.sprints());
+            self.draw_stick(painter, &stick_look, rest, rest, self.sprints());
         }
     }
 
@@ -1570,6 +1861,23 @@ impl Look {
             accent: accent.gamma_multiply(opacity.max(0.6)),
             icon: Color32::from_white_alpha(a(0.95, 0.75)),
             width: 1.5 * scale,
+        }
+    }
+
+    /// Nhân hệ số độ mờ riêng của nút lên bảng màu vẽ (nếu khác 1.0).
+    pub fn with_button_opacity(self, btn_opacity: f32) -> Self {
+        if (btn_opacity - 1.0).abs() < 1e-3 {
+            return self;
+        }
+        let m = btn_opacity.clamp(0.15, 1.0);
+        Self {
+            fill: self.fill.gamma_multiply(m),
+            pressed: self.pressed.gamma_multiply(m),
+            knob: self.knob.gamma_multiply(m),
+            line: self.line.gamma_multiply(m),
+            accent: self.accent.gamma_multiply(m),
+            icon: self.icon.gamma_multiply(m),
+            width: self.width,
         }
     }
 

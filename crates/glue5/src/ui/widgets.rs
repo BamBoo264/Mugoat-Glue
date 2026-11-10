@@ -194,7 +194,12 @@ pub(super) fn segmented<T: PartialEq + Copy>(ui: &mut Ui, value: &mut T, options
                         (false, false) => Color32::TRANSPARENT,
                     };
                     ui.painter().rect_filled(rect, radius, fill);
-                    let font = FontId::new(16.0 * scale, FontFamily::Name("condensed".into()));
+                    let font_size = if options.len() >= 4 {
+                        (15.0 * scale).min((w / 5.2).max(10.5))
+                    } else {
+                        16.0 * scale
+                    };
+                    let font = FontId::new(font_size, FontFamily::Name("condensed".into()));
                     ui.painter().text(
                         rect.center(),
                         Align2::CENTER_CENTER,

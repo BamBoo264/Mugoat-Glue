@@ -2,8 +2,10 @@
 //! Graphics quality is the game's (its menu, Settings › Graphics, saved in
 //! its `settings.xml`).
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+use glue5_runtime::game_settings::{CustomGraphics, GraphicsPreset};
 use serde::{Deserialize, Serialize};
 
 use crate::paths::{MOBILE, TV};
@@ -29,6 +31,12 @@ pub struct Settings {
     /// Whether the low-memory preset is in the game's settings (written at
     /// the first start with `low_memory`; the game's menu changes it after).
     pub low_preset_written: bool,
+    /// Mức cấu hình đồ hoạ được chọn từ launcher (`Cực Thấp` mặc định khi mới cài).
+    pub graphics_preset: GraphicsPreset,
+    /// Các thông số đồ hoạ chi tiết khi chọn `Tuỳ Chỉnh` (hoặc giá trị tương ứng mức preset).
+    pub custom_graphics: CustomGraphics,
+    /// Đã ghi cấu hình đồ hoạ hiện tại xuống `settings.xml` hay chưa.
+    pub graphics_applied: bool,
     /// The game's resolution as a fraction of the window's, per side (the
     /// back buffer follows the window). Chosen for the screen at the first
     /// start ([`Settings::for_screen`]).
@@ -64,6 +72,8 @@ pub struct Settings {
     pub touch_aim: TouchAim,
     /// The Taptic Engine taps under pressed touch controls and plays the game's rumble (iPhone).
     pub haptics: bool,
+    /// Tuỳ chỉnh vị trí, kích cỡ và độ mờ riêng cho từng nút cảm ứng (theo mã nút).
+    pub touch_buttons: BTreeMap<String, ButtonOverride>,
     /// The game starts in the sandbox (the map, no story) rather than the
     /// story: the start page's last choice.
     pub sandbox: bool,
@@ -206,6 +216,41 @@ const LOW_MEMORY_RAM_MB: i32 = 7000;
 /// The render scale's range, in steps of 5%.
 pub const RENDER_SCALES: std::ops::RangeInclusive<f32> = 0.25..=1.0;
 
+/// Tuỳ chỉnh riêng cho từng nút thao tác cảm ứng.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ButtonOverride {
+    /// Độ lệch so với vị trí gốc (tính theo tỉ lệ rộng/cao của vùng an toàn).
+    pub offset: [f32; 2],
+    /// Hệ số kích cỡ (`0.5..=2.0`), nhân với kích cỡ nút chung.
+    pub size: f32,
+    /// Hệ số độ mờ (`0.15..=1.0`), nhân với độ mờ nút chung.
+    pub opacity: f32,
+}
+
+impl Default for ButtonOverride {
+    fn default() -> Self {
+        Self { offset: [0.0, 0.0], size: 1.0, opacity: 1.0 }
+    }
+}
+
+impl ButtonOverride {
+    pub fn clamped(mut self) -> Self {
+        self.offset[0] = self.offset[0].clamp(-0.95, 0.95);
+        self.offset[1] = self.offset[1].clamp(-0.95, 0.95);
+        self.size = self.size.clamp(0.5, 2.0);
+        self.opacity = self.opacity.clamp(0.15, 1.0);
+        self
+    }
+
+    pub fn is_default(&self) -> bool {
+        self.offset[0].abs() < 1e-4
+            && self.offset[1].abs() < 1e-4
+            && (self.size - 1.0).abs() < 1e-4
+            && (self.opacity - 1.0).abs() < 1e-4
+    }
+}
+
 impl Default for Settings {
     fn default() -> Self {
         Settings {
@@ -214,8 +259,11 @@ impl Default for Settings {
             server: String::new(),
             share: false,
             download_all: false,
-            low_memory: MOBILE && sdl3::cpuinfo::system_ram() < LOW_MEMORY_RAM_MB,
+            low_memory: MOBILE,
             low_preset_written: false,
+            graphics_preset: GraphicsPreset::UltraLow,
+            custom_graphics: GraphicsPreset::UltraLow.defaults(),
+            graphics_applied: false,
             render_scale: None,
             vsync: true,
             // Phones hold a steady 60 for longer than they hold 120 (heat).
@@ -233,6 +281,7 @@ impl Default for Settings {
             touch_camera: 1.0,
             touch_aim: TouchAim::LockOn,
             haptics: true,
+            touch_buttons: BTreeMap::new(),
             sandbox: false,
             online: false,
             online_name: String::new(),
@@ -307,14 +356,42 @@ impl Settings {
     /// its GPU time grows with the pixels, and phone screens have many).
     pub fn for_screen(&mut self, height: u32) {
         if self.render_scale.is_none() {
-            let lines = self.render_height.take().unwrap_or(if MOBILE { 720 } else { 1080 });
-            self.render_scale = Some(round_scale(lines as f32 / height.max(1) as f32));
+            if let Some(lines) = self.render_height.take() {
+                self.render_scale = Some(round_scale(lines as f32 / height.max(1) as f32));
+            } else {
+                self.render_scale = Some(recommended_scale(self.graphics_preset, height));
+            }
         }
+    }
+
+    /// Chuyển preset đồ hoạ, đồng bộ cấu hình chi tiết & độ phân giải tương ứng.
+    pub fn apply_graphics_preset(&mut self, preset: GraphicsPreset, window_height: u32) {
+        self.graphics_preset = preset;
+        if preset != GraphicsPreset::Custom {
+            self.custom_graphics = preset.defaults();
+            self.render_scale = Some(recommended_scale(preset, window_height));
+            let small_ram = MOBILE && sdl3::cpuinfo::system_ram() < LOW_MEMORY_RAM_MB;
+            self.low_memory = small_ram || (MOBILE && matches!(preset, GraphicsPreset::UltraLow | GraphicsPreset::Low));
+        }
+        self.graphics_applied = false;
     }
 
     pub fn render_scale(&self) -> f32 {
         self.render_scale.unwrap_or(1.0)
     }
+}
+
+/// Tỉ lệ phân giải khuyến nghị theo từng mức đồ hoạ và chiều cao màn hình.
+pub fn recommended_scale(preset: GraphicsPreset, height: u32) -> f32 {
+    let h = height.max(1) as f32;
+    let lines = match preset {
+        GraphicsPreset::UltraLow | GraphicsPreset::Custom => if MOBILE { 480 } else { 540 },
+        GraphicsPreset::Low => if MOBILE { 576 } else { 720 },
+        GraphicsPreset::Medium => if MOBILE { 720 } else { 900 },
+        GraphicsPreset::High => if MOBILE { 900 } else { 1080 },
+        GraphicsPreset::Ultra => return 1.0,
+    };
+    round_scale(lines as f32 / h)
 }
 
 /// A render scale in the range, to its 5% step.
@@ -387,7 +464,31 @@ mod tests {
         s.for_screen(720);
         assert_eq!(s.render_scale, Some(0.5), "chosen once");
         let mut s = Settings::default();
+        assert_eq!(s.graphics_preset, GraphicsPreset::UltraLow);
         s.for_screen(1170);
-        assert_eq!(s.render_scale, Some(if MOBILE { 0.6 } else { 0.9 }));
+        assert_eq!(s.render_scale, Some(if MOBILE { 0.4 } else { 0.45 }));
+    }
+
+    #[test]
+    fn graphics_presets_and_touch_overrides_roundtrip() {
+        let mut s: Settings = serde_json::from_str(r#"{"online": true}"#).expect("old config loads");
+        assert_eq!(s.graphics_preset, GraphicsPreset::UltraLow);
+        assert!(s.touch_buttons.is_empty());
+
+        s.apply_graphics_preset(GraphicsPreset::High, 1170);
+        assert_eq!(s.graphics_preset, GraphicsPreset::High);
+        assert_eq!(s.custom_graphics, GraphicsPreset::High.defaults());
+        assert_eq!(s.render_scale, Some(recommended_scale(GraphicsPreset::High, 1170)));
+        assert!(!s.graphics_applied);
+
+        s.touch_buttons.insert(
+            "foot:fire".into(),
+            ButtonOverride { offset: [0.2, -0.1], size: 1.5, opacity: 0.75 }.clamped(),
+        );
+        let json = serde_json::to_vec(&s).unwrap();
+        let back: Settings = serde_json::from_slice(&json).unwrap();
+        assert_eq!(back.graphics_preset, GraphicsPreset::High);
+        assert_eq!(back.touch_buttons.get("foot:fire").unwrap().size, 1.5);
+        assert_eq!(back.touch_buttons.get("foot:fire").unwrap().opacity, 0.75);
     }
 }
