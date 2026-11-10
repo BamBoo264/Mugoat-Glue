@@ -1,7 +1,7 @@
 //! Trình chỉnh sửa trực quan bố cục nút thao tác cảm ứng (vị trí, kích cỡ, độ mờ).
 
 use egui::{
-    Align, Align2, Area, Color32, Context, FontFamily, FontId, Frame, Id, Key, Layout, Order, Pos2, Rect, RichText,
+    Align, Align2, Area, Color32, Context, FontFamily, FontId, Frame, Id, Key, Layout, Order, Rect, RichText,
     Sense, Stroke, StrokeKind, Vec2, pos2, vec2,
 };
 

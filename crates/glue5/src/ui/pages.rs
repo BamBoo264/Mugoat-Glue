@@ -1391,7 +1391,7 @@ fn game_folder(ui: &mut egui::Ui, settings: &mut Settings, status: &Status, acti
 
 #[cfg(test)]
 mod tests {
-    use super::{Drivers, Mode, Page, SettingsTab, Status, settings_page, start_page, theme};
+    use super::{Action, Drivers, GraphicsPreset, Mode, Page, SettingsTab, Status, settings_page, start_page, theme};
     use crate::settings::{PerfOverlay, Settings, Upscaling};
     use egui::{Id, Pos2, Rect, SafeAreaInsets, vec2};
     use std::path::Path;
