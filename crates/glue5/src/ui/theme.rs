@@ -12,13 +12,13 @@ pub(super) const CARD_HOVER: Color32 = Color32::from_rgb(33, 40, 56);
 /// Nền hốc điều khiển (thanh trượt, công tắc tắt, nhãn phụ).
 pub(super) const CONTROL: Color32 = Color32::from_rgb(40, 48, 66);
 /// Viền kính mảnh.
-pub(super) const BORDER: Color32 = Color32::from_rgba_unmultiplied(255, 255, 255, 26);
+pub(super) const BORDER: Color32 = Color32::from_rgba_premultiplied(26, 26, 26, 26);
 /// Viền nổi bật hơn khi chọn / di chuột.
-pub(super) const BORDER_STRONG: Color32 = Color32::from_rgba_unmultiplied(255, 255, 255, 62);
+pub(super) const BORDER_STRONG: Color32 = Color32::from_rgba_premultiplied(62, 62, 62, 62);
 /// Màu nhấn Vàng Champagne chủ đạo đồng bộ với huy hiệu logo mới.
 pub(super) const ACCENT: Color32 = Color32::from_rgb(244, 186, 82);
 /// Lớp phủ vàng mờ cho thẻ đang chọn và tab hoạt động.
-pub(super) const ACCENT_SOFT: Color32 = Color32::from_rgba_unmultiplied(244, 186, 82, 34);
+pub(super) const ACCENT_SOFT: Color32 = Color32::from_rgba_premultiplied(33, 25, 11, 34);
 /// Màu chữ tương phản trên nút vàng.
 pub(super) const ACCENT_INK: Color32 = Color32::from_rgb(18, 15, 10);
 /// Màu nhấn Cyan điện cho chế độ Online & kết nối mạng.

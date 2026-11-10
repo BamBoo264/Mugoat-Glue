@@ -212,7 +212,8 @@ pub fn prepare_documents() {
     {
         let docs = sdl3::filesystem::get_user_folder(sdl3::filesystem::Folder::DOCUMENTS)
             .ok()
-            .or_else(|| std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join("Documents")));
+            .map(Path::to_path_buf)
+            .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join("Documents")));
         let Some(docs) = docs else {
             return;
         };
