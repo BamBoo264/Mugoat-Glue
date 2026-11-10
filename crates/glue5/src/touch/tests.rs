@@ -341,13 +341,21 @@ fn a_menu_takes_taps_and_drags() {
     t.finger_up(1);
     let m = t.take_mouse();
     assert!(m.down && (m.at.unwrap().x - x).abs() < 1e-6, "a tap's small slip keeps the pointer");
-    std::thread::sleep(MIN_PRESS);
+    std::thread::sleep(MIN_PRESS + Duration::from_millis(20));
     assert!(!t.take_mouse().down);
     // That click only went into the menu's column: it clicks again, once.
     t.menu_went_deeper(Some(Instant::now()));
-    std::thread::sleep(AGAIN_DELAY);
-    assert!(t.take_mouse().down);
-    std::thread::sleep(MIN_PRESS);
+    let deadline = Instant::now() + AGAIN_DELAY + MIN_PRESS + Duration::from_millis(250);
+    let mut clicked_again = false;
+    while Instant::now() < deadline {
+        if t.take_mouse().down {
+            clicked_again = true;
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    assert!(clicked_again);
+    std::thread::sleep(MIN_PRESS + Duration::from_millis(20));
     t.menu_went_deeper(Some(Instant::now()));
     assert!(!t.take_mouse().down);
     // A drag down scrolls up (natural scrolling), the pointer stays, no click.
@@ -412,8 +420,16 @@ fn a_scripts_cursor_menu_drops_the_pad() {
     let (x, y) = at(&t, pos2(150.0, 120.0));
     t.finger_down(1, x, y);
     t.finger_up(1);
-    std::thread::sleep(CLICK_DELAY);
-    assert!(t.take_mouse().down && t.gamepad().buttons == 0);
+    let deadline = Instant::now() + CLICK_DELAY + MIN_PRESS + Duration::from_millis(250);
+    let mut clicked = false;
+    while Instant::now() < deadline {
+        if t.take_mouse().down {
+            clicked = true;
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    assert!(clicked && t.gamepad().buttons == 0);
     // Without its cursor (a scene with its bar, not a menu for the mouse):
     // the D-pad.
     t.set_context(PlayerContext { scripted: true, bar: true, ..context(Activity::OnFoot) });

@@ -1340,7 +1340,7 @@ fn gpu_driver(ui: &mut egui::Ui, settings: &mut Settings, drivers: &Drivers, bef
     }
     if before_game {
         let subtitle = if drivers.adding { "Đang thêm…" } else { "Gói Adreno Tools (.zip): Turnip, Qualcomm" };
-        setting(ui, "Trình điều khiển GPU", Control::Actions, Some(subtitle), |ui| {
+        setting(ui, "Gói trình điều khiển GPU", Control::Actions, Some(subtitle), |ui| {
             ui.add_enabled_ui(!drivers.adding, |ui| {
                 let remove = settings.gpu_driver.clone();
                 let labels: &[&str] = if remove.is_some() { &["Gỡ", "Thêm…"] } else { &["Thêm…"] };
@@ -1557,7 +1557,7 @@ mod tests {
             Drivers { packages, in_use: None, running: "Driver Build: 0e9a8a8".into(), adding: false, fallback: None };
         let mut settings = Settings::default();
         settings.gpu_driver = Some("turnip".into());
-        phone_video_options(settings, Some(&drivers), "Trình điều khiển GPU");
+        phone_video_options(settings, Some(&drivers), "Gói trình điều khiển GPU");
     }
 
     /// The Video tab on a phone, `last` its last option.

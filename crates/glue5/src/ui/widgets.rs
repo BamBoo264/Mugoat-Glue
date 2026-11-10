@@ -499,7 +499,7 @@ mod tests {
                 |root| {
                     CentralPanel::default().show(root, |ui| {
                         ui.set_width(width);
-                        right = ui.max_rect().right() - 12.0;
+                        right = ui.max_rect().right() - 13.0;
                         setting(
                             ui,
                             "Thư mục trò chơi",

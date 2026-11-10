@@ -1,8 +1,8 @@
 //! Trình chỉnh sửa trực quan bố cục nút thao tác cảm ứng (vị trí, kích cỡ, độ mờ).
 
 use egui::{
-    Align, Align2, Area, Color32, Context, FontFamily, FontId, Frame, Id, Key, Layout, Order, Rect, RichText,
-    Sense, Stroke, StrokeKind, Vec2, pos2, vec2,
+    Align2, Area, Color32, Context, FontFamily, FontId, Frame, Id, Key, Order, Rect, RichText, Sense, Stroke,
+    StrokeKind, Vec2, pos2, vec2,
 };
 
 use super::theme::{ACCENT, ACCENT_INK, BORDER, BORDER_STRONG, CARD, CARD_HOVER, MUTED, SURFACE, TEXT, apply_density, heading, layout_scale};
@@ -112,15 +112,17 @@ pub(super) fn touch_editor_page(
 
     // Bảng điều khiển gọn nổi trên/dưới vùng an toàn.
     let mut done = false;
-    let bar_w = (safe.width() - 16.0 * scale).clamp(240.0, 560.0 * scale);
+    let bar_w = (safe.width() - 12.0 * scale).clamp(180.0, 520.0 * scale);
     let anchor = if state.panel_bottom {
         (Align2::CENTER_BOTTOM, pos2(safe.center().x, safe.bottom() - 8.0 * scale))
     } else {
         (Align2::CENTER_TOP, pos2(safe.center().x, safe.top() + 8.0 * scale))
     };
 
+    let margin = (8.0 * scale) as i8;
     Area::new(Id::new("touch-editor-bar"))
         .order(Order::Foreground)
+        .default_size(vec2(bar_w, 80.0))
         .anchor(anchor.0, Vec2::ZERO)
         .fixed_pos(anchor.1)
         .show(ctx, |ui| {
@@ -129,9 +131,11 @@ pub(super) fn touch_editor_page(
                 .fill(Color32::from_rgba_unmultiplied(SURFACE.r(), SURFACE.g(), SURFACE.b(), 238))
                 .stroke(Stroke::new(1.0, BORDER_STRONG))
                 .corner_radius((16.0 * scale) as u8)
-                .inner_margin((10.0 * scale) as i8);
+                .inner_margin(margin);
             frame.show(ui, |ui| {
-                ui.set_width(bar_w - 20.0 * scale);
+                let inner_w = (bar_w - margin as f32 * 2.0 - 2.0).max(140.0);
+                ui.set_width(inner_w);
+                ui.set_max_width(inner_w);
                 ui.spacing_mut().item_spacing = vec2(6.0 * scale, 6.0 * scale);
 
                 let selected_ctrl = controls
@@ -140,26 +144,24 @@ pub(super) fn touch_editor_page(
                     .cloned();
 
                 // Hàng 1: Tiêu đề nút đang chọn + nút chuyển vị trí thanh + Đặt lại hết + Xong.
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     let (bar, _) = ui.allocate_exact_size(vec2(3.5 * scale, 18.0 * scale), Sense::hover());
                     ui.painter().rect_filled(bar, 2.0, ACCENT);
                     let title = selected_ctrl
                         .as_ref()
                         .map(|c| c.label)
                         .unwrap_or("TÙY CHỈNH NÚT THAO TÁC");
-                    ui.label(heading(title, 17.0 * scale).color(TEXT));
-                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        if done_pill(ui, "Xong", scale).clicked() || ui.input(|i| i.key_pressed(Key::Escape)) {
-                            done = true;
-                        }
-                        if compact_pill(ui, "Mặc định", false, scale).clicked() {
-                            settings.touch_buttons.clear();
-                        }
-                        let flip_label = if state.panel_bottom { "Đưa lên" } else { "Đưa xuống" };
-                        if compact_pill(ui, flip_label, false, scale).clicked() {
-                            state.panel_bottom = !state.panel_bottom;
-                        }
-                    });
+                    ui.label(heading(title, 16.0 * scale).color(TEXT));
+                    let flip_label = if state.panel_bottom { "Đưa lên" } else { "Đưa xuống" };
+                    if compact_pill(ui, flip_label, false, scale).clicked() {
+                        state.panel_bottom = !state.panel_bottom;
+                    }
+                    if compact_pill(ui, "Mặc định", false, scale).clicked() {
+                        settings.touch_buttons.clear();
+                    }
+                    if done_pill(ui, "Xong", scale).clicked() || ui.input(|i| i.key_pressed(Key::Escape)) {
+                        done = true;
+                    }
                 });
 
                 // Hàng 2: Chọn chế độ/bố cục điều khiển xem trước.
@@ -177,17 +179,17 @@ pub(super) fn touch_editor_page(
                 if let Some(ctrl) = selected_ctrl {
                     let mut ov = settings.touch_buttons.get(&ctrl.id).copied().unwrap_or_default();
                     let prev = ov;
-                    let slider_w = (ui.available_width() * 0.42).clamp(86.0 * scale, 165.0 * scale);
+                    let slider_w = ((inner_w * 0.44) - 82.0 * scale).clamp(60.0 * scale, 125.0 * scale);
                     ui.spacing_mut().slider_width = slider_w;
                     ui.spacing_mut().interact_size.y = 32.0 * scale;
 
                     ui.horizontal_wrapped(|ui| {
                         ui.horizontal(|ui| {
-                            ui.label(RichText::new("Cỡ").size(13.0 * scale).color(MUTED));
+                            ui.label(RichText::new("Cỡ").size(12.5 * scale).color(MUTED));
                             widgets::slider(ui, &mut ov.size, 0.5..=2.0, 0.05, "×", 2);
                         });
                         ui.horizontal(|ui| {
-                            ui.label(RichText::new("Độ mờ").size(13.0 * scale).color(MUTED));
+                            ui.label(RichText::new("Độ mờ").size(12.5 * scale).color(MUTED));
                             widgets::slider(ui, &mut ov.opacity, 0.15..=1.0, 0.05, "%", 0);
                         });
                         if settings.touch_buttons.contains_key(&ctrl.id)
