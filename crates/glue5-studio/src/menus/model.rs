@@ -161,7 +161,7 @@ pub(crate) fn shown(value: f64, step: f64, unit: Option<&str>) -> String {
 pub(crate) fn summary(chosen: &[usize], options: &[String]) -> String {
     let names: Vec<&str> = chosen.iter().filter_map(|&i| options.get(i.wrapping_sub(1)).map(String::as_str)).collect();
     match names.len() {
-        0 => "None".into(),
+        0 => "Không có".into(),
         1 | 2 => names.join(", "),
         n => format!("{} +{}", names[..2].join(", "), n - 2),
     }

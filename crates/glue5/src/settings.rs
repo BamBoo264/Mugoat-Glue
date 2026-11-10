@@ -249,9 +249,9 @@ impl Default for Settings {
     }
 }
 
-/// A name for a new online player: "Player" and four digits.
+/// Tên mặc định cho người chơi Online mới: "NguoiChoi" kèm 4 chữ số.
 pub fn default_online_name() -> String {
-    format!("Player{:04}", random() % 10000)
+    format!("NguoiChoi{:04}", random() % 10000)
 }
 
 fn random() -> u64 {

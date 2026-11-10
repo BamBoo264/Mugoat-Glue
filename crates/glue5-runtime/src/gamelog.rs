@@ -66,7 +66,7 @@ fn fatal_error(bytes: &[u8]) -> Option<String> {
     let at = bytes.windows(MARK.len()).position(|w| w == MARK)? + MARK.len();
     let rest = &bytes[at..];
     let end = rest.iter().position(|&b| b == b'\n').unwrap_or(rest.len());
-    Some(format!("the engine failed: {}", String::from_utf8_lossy(&rest[..end]).trim()))
+    Some(format!("engine gặp lỗi: {}", String::from_utf8_lossy(&rest[..end]).trim()))
 }
 
 fn run(rx: Receiver<Vec<u8>>, file: File, to_stdout: bool) {

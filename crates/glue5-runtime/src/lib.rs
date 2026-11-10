@@ -310,7 +310,7 @@ pub fn start(config: Config, gpu: gpu::GpuBackend) -> Result<Game> {
     time::fine_timers();
     // Streaming, the engine's HTTP device serves /game (stream.rs).
     let game_files = config.stream.is_none().then(|| data.clone());
-    let vfs = Vfs::new(game_files, config.user_dir.clone()).with_context(|| format!("opening {}", data.display()))?;
+    let vfs = Vfs::new(game_files, config.user_dir.clone()).with_context(|| format!("không thể mở {}", data.display()))?;
     let memory = WasmMemory::reserve()?;
     let runtime = Runtime {
         config,
@@ -324,7 +324,7 @@ pub fn start(config: Config, gpu: gpu::GpuBackend) -> Result<Game> {
         threads: threads::Registry::default(),
     };
     if RUNTIME.set(runtime).is_err() {
-        anyhow::bail!("the game is already running");
+        anyhow::bail!("trò chơi đang chạy rồi");
     }
     // Each module sets the hooks it implements (glue5-game's hooks/).
     let mut hooks = glue5_game::Hooks::default();

@@ -33,7 +33,7 @@ pub(crate) fn pair(s: S, code: &str) {
         // 401: a wrong code; else no game to ask.
         s.pair_failed.set(status.as_f64() == Some(401.0));
         if status.as_f64() != Some(401.0) {
-            s.notice.set(Some("The game did not answer: is it still running?".into()));
+            s.notice.set(Some("Trò chơi không phản hồi: bạn vẫn đang mở chứ?".into()));
         }
         s.pairing.set(Pairing::Needed);
     });
@@ -94,24 +94,24 @@ pub(crate) fn Pair(s: S) -> impl IntoView {
     let code = RwSignal::new(String::new());
     let submit = move || pair(s, &code.get_untracked());
     let (title, what) = match mode() {
-        Mode::Studio => ("STUDIO", "Pair this browser with the game: enter the code shown in the game, under Mods › Studio."),
-        Mode::Control => ("CONTROL", "Pair this device to use the mods and their menus: enter the code shown in the game, under Mods › Studio, or scan its QR code."),
+        Mode::Studio => ("STUDIO", "Ghép nối trình duyệt này với trò chơi: nhập mã hiển thị trong game ở mục Bản mod › Studio."),
+        Mode::Control => ("ĐIỀU KHIỂN", "Ghép nối thiết bị để dùng mod và menu: nhập mã hiển thị trong game ở mục Bản mod › Studio hoặc quét mã QR."),
     };
     view! {
         <div class="pair">
             <div class="pair-card">
-                <div class="brand big"><img src="/logo.png" alt=""/><b>"GLUE 5"</b><span>{title}</span></div>
+                <div class="brand big"><img src="/logo.png" alt=""/><b>"MUGOAT GLUE"</b><span>{title}</span></div>
                 <p>{what}</p>
                 <Show when=move || s.pair_failed.get()>
-                    <p class="pair-error">"That code did not work: check it in the game (it changes when someone presses New)."</p>
+                    <p class="pair-error">"Mã không hợp lệ: hãy kiểm tra lại trong game (mã sẽ đổi khi nhấn Tạo mới)."</p>
                 </Show>
                 <input class="code-input" placeholder="ABCD-1234" autocomplete="off" autocapitalize="characters" spellcheck="false"
-                    inputmode="text" aria-label="Pairing code"
+                    inputmode="text" aria-label="Mã ghép nối"
                     prop:value=move || code.get()
                     on:input=move |ev| code.set(event_target_value(&ev))
                     on:keydown=move |ev| if ev.key() == "Enter" { submit() } />
-                <button class="btn primary wide" on:click=move |_| submit()>"Pair"</button>
-                <p class="pair-note">"Once paired, this browser stays paired: the game lists it under Mods › Studio, where it can be removed."</p>
+                <button class="btn primary wide" on:click=move |_| submit()>"Ghép nối"</button>
+                <p class="pair-note">"Sau khi ghép nối, trình duyệt này sẽ được ghi nhớ: quản lý tại mục Bản mod › Studio trong game."</p>
             </div>
         </div>
     }

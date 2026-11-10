@@ -42,7 +42,7 @@ pub(super) fn Row(s: S, module: String, menu: u32, id: u32, push: Callback<Level
         Some(Kind::Button { .. }) => {
             let action = move || match it().kind {
                 Kind::Button { action: Some(a) } if !a.is_empty() => a,
-                _ => "Run".to_string(),
+                _ => "Chạy".to_string(),
             };
             view! {
                 <div class=row_class("")>
@@ -116,7 +116,7 @@ pub(super) fn Row(s: S, module: String, menu: u32, id: u32, push: Callback<Level
                 <div class=row_class("")>
                     {text}
                     <div class="mnumber">
-                        <button class="mstep" aria-label="Less" title="Less" prop:disabled=off on:click=move |_| by(-1.0)>"−"</button>
+                        <button class="mstep" aria-label="Giảm" title="Giảm" prop:disabled=off on:click=move |_| by(-1.0)>"−"</button>
                         <input type="number" node_ref=field aria-label=label inputmode="decimal" prop:disabled=off
                             step=move || get().3 * k() min=move || get().1.map(|m| m * k()) max=move || get().2.map(|m| m * k())
                             on:focus=move |_| focused.set(true)
@@ -127,7 +127,7 @@ pub(super) fn Row(s: S, module: String, menu: u32, id: u32, push: Callback<Level
                                     input(json!(v / k()));
                                 }
                             }/>
-                        <button class="mstep" aria-label="More" title="More" prop:disabled=off on:click=move |_| by(1.0)>"+"</button>
+                        <button class="mstep" aria-label="Tăng" title="Tăng" prop:disabled=off on:click=move |_| by(1.0)>"+"</button>
                         {unit}
                     </div>
                 </div>
@@ -206,11 +206,11 @@ pub(super) fn Row(s: S, module: String, menu: u32, id: u32, push: Callback<Level
                     {text}
                     <div class="mcolor">
                         <Show when=has_alpha>
-                            <input type="range" class="malpha" min="0" max="255" title="Opacity" aria-label="Opacity"
+                            <input type="range" class="malpha" min="0" max="255" title="Độ đục" aria-label="Độ đục"
                                 prop:value=opacity prop:disabled=off
                                 on:change=move |ev| input(json!(with_alpha(&rgb(), event_target_value(&ev).parse().unwrap_or(255))))/>
                         </Show>
-                        <input type="text" class="mhex" node_ref=hex aria-label=move || format!("{} (hex)", label()) spellcheck="false"
+                        <input type="text" class="mhex" node_ref=hex aria-label=move || format!("{} (mã hex)", label()) spellcheck="false"
                             maxlength=move || if has_alpha() { 9 } else { 7 } prop:disabled=off
                             on:focus=move |_| focused.set(true)
                             on:blur=move |_| { focused.set(false); resync.notify(); }
@@ -218,7 +218,7 @@ pub(super) fn Row(s: S, module: String, menu: u32, id: u32, push: Callback<Level
                             on:change=move |ev| match parse_hex(&event_target_value(&ev), has_alpha()) {
                                 Some(c) => input(json!(c)),
                                 None => {
-                                    s.notice.set(Some(format!("{}: a colour is #rrggbb{}", label(), if has_alpha() { " or #rrggbbaa" } else { "" })));
+                                    s.notice.set(Some(format!("{}: mã màu phải là #rrggbb{}", label(), if has_alpha() { " hoặc #rrggbbaa" } else { "" })));
                                     resync.notify();
                                 }
                             }/>
@@ -345,14 +345,14 @@ pub(super) fn Picker(s: S, module: String, menu: u32, item: u32, pop: Callback<(
         <div class="mpicker">
             <div class="mpick-bar">
                 <Show when=move || { count() > SEARCH_FROM }>
-                    <input type="search" class="msearch" placeholder="Search" aria-label="Search the options" spellcheck="false"
+                    <input type="search" class="msearch" placeholder="Tìm kiếm" aria-label="Tìm kiếm lựa chọn" spellcheck="false"
                         prop:value=move || search.get() on:input=move |ev| search.set(event_target_value(&ev))/>
                 </Show>
                 <Show when=move || multi>
-                    <span class="mcount">{move || format!("{} of {}", chosen.with(Vec::len), count())}</span>
+                    <span class="mcount">{move || format!("{} / {}", chosen.with(Vec::len), count())}</span>
                     <Show when=move || { count() > BULK_FROM }>
-                        <button class="btn small ghost" on:click=move |_| bulk(true)>"All"</button>
-                        <button class="btn small ghost" on:click=move |_| bulk(false)>"None"</button>
+                        <button class="btn small ghost" on:click=move |_| bulk(true)>"Tất cả"</button>
+                        <button class="btn small ghost" on:click=move |_| bulk(false)>"Bỏ chọn"</button>
                     </Show>
                 </Show>
             </div>
@@ -384,7 +384,7 @@ pub(super) fn Picker(s: S, module: String, menu: u32, item: u32, pop: Callback<(
                     }}
                 </For>
                 <Show when=move || shown_options.with(Vec::is_empty)>
-                    <p class="mempty">"Nothing matches"</p>
+                    <p class="mempty">"Không có lựa chọn phù hợp"</p>
                 </Show>
             </div>
         </div>

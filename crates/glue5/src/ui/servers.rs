@@ -4,7 +4,7 @@
 //! what this device keeps of the game.
 use std::time::{Duration, Instant};
 
-use egui::{Align, Color32, Layout, RichText, Sense, Stroke, pos2, vec2};
+use egui::{Align, Layout, RichText, Sense, Stroke, pos2, vec2};
 use glue5_stream::Check;
 
 use super::pages::{bytes, card_title, is_server, server_name, sheet, small, stream_progress, stream_state};
@@ -55,8 +55,8 @@ pub(super) fn servers_page(
         ui.add_space(4.0 * theme::density(ui));
         muted(
             ui,
-            "The game's files come from the server as the game reads them, and stay on this device: later starts \
-             ask it only for what is not here yet.",
+            "Các tệp trò chơi sẽ được truyền từ máy chủ mỗi khi trò chơi đọc tới và lưu lại trên thiết bị này: \
+             những lần mở sau chỉ cần tải bổ sung phần chưa có.",
         );
     })
 }
@@ -121,8 +121,8 @@ fn network(ui: &mut egui::Ui, settings: &Settings, status: &Status, actions: &mu
     if status.servers.is_empty() {
         muted(
             ui,
-            "Looking for computers sharing the game. On the one with the game: Glue 5 › Settings › Game › Share on \
-             the network, or glue5-serve; both on the same network.",
+            "Đang tìm máy tính đang chia sẻ trò chơi. Trên máy có game hãy bật: Mugoat Glue › Cài đặt › Trò chơi › \
+             Chia sẻ qua mạng, hoặc chạy glue5-serve trên cùng mạng Wi-Fi.",
         );
         if cfg!(target_os = "ios") {
             muted(ui, "Nếu không thấy máy nào, cấp quyền mạng nội bộ trong Cài đặt › Quyền riêng tư & Bảo mật.");
@@ -130,8 +130,7 @@ fn network(ui: &mut egui::Ui, settings: &Settings, status: &Status, actions: &mu
     }
 }
 
-/// An arc turning: the network is searched. Ten frames a second, not every
-/// frame (the page draws only when something moves).
+/// Vòng cung xoay biểu thị đang quét mạng.
 fn scanning(ui: &mut egui::Ui) {
     let scale = theme::density(ui);
     let (rect, _) = ui.allocate_exact_size(vec2(40.0, 40.0) * scale, Sense::hover());
@@ -141,11 +140,11 @@ fn scanning(ui: &mut egui::Ui) {
         let a = turn + i as f32 / 16.0 * std::f32::consts::TAU * 0.7;
         pos2(c.x + r * a.cos(), c.y + r * a.sin())
     });
-    ui.painter().add(egui::Shape::line(points.collect(), Stroke::new(2.0 * scale, theme::MUTED)));
+    ui.painter().add(egui::Shape::line(points.collect(), Stroke::new(2.2 * scale, theme::CYAN)));
     ui.ctx().request_repaint_after(Duration::from_millis(100));
 }
 
-/// A server by its address: typed, then Connect (or Enter).
+/// Nhập địa chỉ máy chủ thủ công rồi nhấn Kết nối (hoặc Enter).
 fn by_address(ui: &mut egui::Ui, page: &mut ServersPage, actions: &mut Vec<Action>) {
     let scale = theme::density(ui);
     section(ui, "NHẬP ĐỊA CHỈ", |_| {});
@@ -159,9 +158,16 @@ fn by_address(ui: &mut egui::Ui, page: &mut ServersPage, actions: &mut Vec<Actio
             .inner;
         let enter = typed.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
         let ready = !page.address.trim().is_empty();
-        let connect = egui::Button::new(RichText::new("Kết nối").size(14.0 * scale))
-            .corner_radius((12.0 * scale) as u8)
-            .min_size(vec2(button, 44.0 * scale));
+        let connect = egui::Button::new(
+            RichText::new("Kết nối")
+                .size(14.0 * scale)
+                .color(if ready { theme::ACCENT_INK } else { theme::MUTED })
+                .strong(),
+        )
+        .fill(if ready { theme::ACCENT } else { theme::CARD })
+        .stroke(Stroke::new(1.0, if ready { theme::ACCENT } else { theme::BORDER }))
+        .corner_radius((12.0 * scale) as u8)
+        .min_size(vec2(button, 44.0 * scale));
         let clicked = focus(ui.add_enabled(ready, connect)).clicked();
         if ready && (clicked || enter) {
             actions.push(Action::UseServer(page.address.trim().to_owned()));
@@ -222,17 +228,18 @@ fn section(ui: &mut egui::Ui, title: &str, right: impl FnOnce(&mut egui::Ui)) {
     let scale = theme::density(ui);
     ui.add_space(6.0 * scale);
     ui.horizontal(|ui| {
-        ui.label(theme::heading(title, 17.0 * scale).color(theme::MUTED));
+        ui.label(theme::heading(title, 17.0 * scale).color(theme::ACCENT));
         ui.with_layout(Layout::right_to_left(Align::Center), right);
     });
 }
 
-/// The server in use's box: the settings rows' look.
+/// Khung kính chứa thông tin máy chủ đang sử dụng.
 fn panel(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui)) {
     let scale = theme::density(ui);
     egui::Frame::new()
-        .fill(Color32::from_gray(28))
-        .corner_radius((14.0 * scale) as u8)
+        .fill(theme::CARD)
+        .stroke(Stroke::new(1.0, theme::BORDER))
+        .corner_radius((16.0 * scale) as u8)
         .inner_margin((14.0 * scale) as i8)
         .show(ui, |ui| {
             ui.set_width(ui.available_width());

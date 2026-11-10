@@ -26,23 +26,23 @@ local function setTime(h: number, m: number)
 end
 
 local function time(menu: Menu)
-	menu:separator("Time")
-	local hour = menu:slider("Hour", clock.getClockHours(), 0, 23, 1, bind.safe("Hour", function(h)
+	menu:separator("Thời gian")
+	local hour = menu:slider("Giờ", clock.getClockHours(), 0, 23, 1, bind.safe("Giờ", function(h)
 		setTime(h, clock.getClockMinutes())
 	end))
-	local minute = menu:number("Minute", clock.getClockMinutes(), { min = 0, max = 59, step = 5 }, bind.safe("Minute", function(m)
+	local minute = menu:number("Phút", clock.getClockMinutes(), { min = 0, max = 59, step = 5 }, bind.safe("Phút", function(m)
 		setTime(clock.getClockHours(), m)
 	end))
 	-- The game's clock runs on: shown as it is whenever the menu opens.
-	menu:onOpen(bind.safe("World", function()
+	menu:onOpen(bind.safe("Thế giới", function()
 		hour.value = clock.getClockHours()
 		minute.value = clock.getClockMinutes()
 	end))
-	bind.command(menu, "world.gameTime", "Back to the game's time", { note = "In GTA Online, the session's", action = "Reset" }, function(): string?
+	bind.command(menu, "world.gameTime", "Quay về giờ mặc định của game", { note = "Trong GTA Online là giờ của phòng", action = "Đặt lại" }, function(): string?
 		network.networkClearClockTimeOverride()
 		return nil
 	end)
-	bind.feature(menu, "world.freezeClock", "Freeze time", "The clock stops where it is", {
+	bind.feature(menu, "world.freezeClock", "Đóng băng thời gian", "Đồng hồ đứng yên tại giờ hiện tại", {
 		on = function()
 			clock.pauseClock(true)
 		end,
@@ -50,24 +50,24 @@ local function time(menu: Menu)
 			clock.pauseClock(false)
 		end,
 	})
-	bind.feature(menu, "world.realTime", "Real time", "The clock follows this device's", {
+	bind.feature(menu, "world.realTime", "Thời gian thực", "Đồng hồ trong game chạy theo giờ thiết bị", {
 		tick = function()
 			local now = os.date("*t")
 			setTime(now.hour, now.min)
 		end,
 	})
-	bind.slider(menu, "world.timeScale", "Game speed", 1, 0.1, 1, { step = 0.1, unit = "%", note = "Slow motion below 100 %" }, function(v)
+	bind.slider(menu, "world.timeScale", "Tốc độ game", 1, 0.1, 1, { step = 0.1, unit = "%", note = "Làm chậm thời gian khi dưới 100%" }, function(v)
 		misc.setTimeScale(v)
 	end)
 end
 
 local function weather(menu: Menu)
-	menu:separator("Weather and sea")
+	menu:separator("Thời tiết và biển")
 	local names = {}
 	for _, w in data.weathers do
 		table.insert(names, w[2])
 	end
-	menu:choice("Weather", names, 1, "Changes at once", bind.safe("Weather", function(i: number)
+	menu:choice("Thời tiết", names, 1, "Thay đổi ngay lập tức", bind.safe("Thời tiết", function(i: number)
 		local name = data.weathers[i][1]
 		if online() then
 			misc.setOverrideWeather(name)
@@ -75,18 +75,18 @@ local function weather(menu: Menu)
 			misc.setWeatherTypeNowPersist(name)
 		end
 	end))
-	bind.command(menu, "world.gameWeather", "Back to the game's weather", { action = "Reset" }, function(): string?
+	bind.command(menu, "world.gameWeather", "Quay về thời tiết mặc định", { action = "Đặt lại" }, function(): string?
 		misc.clearOverrideWeather()
 		misc.clearWeatherTypePersist()
 		return nil
 	end)
-	bind.slider(menu, "world.wind", "Wind", 0, 0, 12, { step = 1, unit = "m/s" }, function(v)
+	bind.slider(menu, "world.wind", "Sức gió", 0, 0, 12, { step = 1, unit = "m/s" }, function(v)
 		misc.setWindSpeed(v)
 	end)
-	bind.slider(menu, "world.waves", "Waves", 1, 0, 5, { step = 0.5, unit = "×", note = "How high the sea's waves are" }, function(v)
+	bind.slider(menu, "world.waves", "Sóng biển", 1, 0, 5, { step = 0.5, unit = "×", note = "Độ cao sóng ngoài biển" }, function(v)
 		water.setDeepOceanScaler(v)
 	end)
-	bind.feature(menu, "world.blackout", "Blackout", "Every light of the city off", {
+	bind.feature(menu, "world.blackout", "Mất điện toàn thành phố", "Tắt toàn bộ đèn đường và tòa nhà", {
 		on = function()
 			graphics.setArtificialLightsState(true)
 		end,
@@ -94,23 +94,23 @@ local function weather(menu: Menu)
 			graphics.setArtificialLightsState(false)
 		end,
 	})
-	bind.choice(menu, "world.gravity", "Gravity", data.gravity, data.gravity[1], nil, function(i)
+	bind.choice(menu, "world.gravity", "Trọng lực", data.gravity, data.gravity[1], nil, function(i)
 		misc.setGravityLevel(i - 1)
 	end)
 end
 
 local function filters(root: Menu)
-	local menu = root:submenu("Screen filters", { note = "The game's own looks", search = true })
-	local strength = bind.slider(menu, "world.filterStrength", "Strength", 1, 0, 1, { step = 0.05, unit = "%" }, function(v)
+	local menu = root:submenu("Bộ lọc màn hình", { note = "Các bộ lọc màu sẵn có của game", search = true })
+	local strength = bind.slider(menu, "world.filterStrength", "Cường độ", 1, 0, 1, { step = 0.05, unit = "%" }, function(v)
 		graphics.setTimecycleModifierStrength(v)
 	end)
-	bind.command(menu, "world.noFilter", "None", { action = "Clear" }, function(): string?
+	bind.command(menu, "world.noFilter", "Không dùng bộ lọc", { action = "Tắt" }, function(): string?
 		graphics.clearTimecycleModifier()
 		return nil
 	end)
 	menu:separator()
 	for _, f in data.filters do
-		bind.action(menu, f[1], { action = "Use" }, function(): string?
+		bind.action(menu, f[1], { action = "Dùng" }, function(): string?
 			graphics.setTimecycleModifier(f[2])
 			graphics.setTimecycleModifierStrength(strength.value)
 			return nil
@@ -119,7 +119,7 @@ local function filters(root: Menu)
 end
 
 local function streets(menu: Menu)
-	menu:separator("Streets and police")
+	menu:separator("Đường phố và cảnh sát")
 	local traffic, people = 1, 1
 	local function busy()
 		vehicle.setVehicleDensityMultiplierThisFrame(traffic)
@@ -136,15 +136,15 @@ local function streets(menu: Menu)
 			loop.remove("world.density")
 		end
 	end
-	bind.slider(menu, "world.traffic", "Traffic", 1, 0, 1, { step = 0.1, unit = "%" }, function(v)
+	bind.slider(menu, "world.traffic", "Mật độ xe cộ", 1, 0, 1, { step = 0.1, unit = "%" }, function(v)
 		traffic = v
 		apply()
 	end)
-	bind.slider(menu, "world.people", "People", 1, 0, 1, { step = 0.1, unit = "%" }, function(v)
+	bind.slider(menu, "world.people", "Mật độ người dân", 1, 0, 1, { step = 0.1, unit = "%" }, function(v)
 		people = v
 		apply()
 	end)
-	bind.feature(menu, "world.noTrains", "No trains or boats", "The city's own, not yours", {
+	bind.feature(menu, "world.noTrains", "Tắt tàu hỏa & tàu thuyền", "Chỉ tắt phương tiện ngẫu nhiên của thành phố", {
 		on = function()
 			vehicle.setRandomTrains(false)
 			vehicle.setRandomBoats(false)
@@ -154,7 +154,7 @@ local function streets(menu: Menu)
 			vehicle.setRandomBoats(true)
 		end,
 	})
-	bind.feature(menu, "world.noDispatch", "No police dispatch", "No patrols, helicopters, roadblocks or SWAT sent after you", {
+	bind.feature(menu, "world.noDispatch", "Ngừng điều động cảnh sát", "Không tuần tra, trực thăng, chốt chặn hay SWAT truy đuổi bạn", {
 		on = function()
 			for service = 1, data.dispatchServices do
 				misc.enableDispatchService(service, false)
@@ -170,7 +170,7 @@ local function streets(menu: Menu)
 	})
 	-- The scripts start again when the player comes back: ended again every few seconds.
 	local since = 0
-	bind.feature(menu, "world.restricted", "Go anywhere", "The army base, the prison, the airport let you in", {
+	bind.feature(menu, "world.restricted", "Đi vào mọi khu vực cấm", "Doanh trại quân đội, nhà tù, sân bay đều không truy nã", {
 		tick = function()
 			since += misc.getFrameTime()
 			if since < 3 then
@@ -182,7 +182,7 @@ local function streets(menu: Menu)
 			end
 		end,
 	})
-	bind.feature(menu, "world.riot", "Riot", "Everyone fights everyone", {
+	bind.feature(menu, "world.riot", "Bạo loạn thành phố", "Mọi người dân lao vào đánh nhau loạn xạ", {
 		on = function()
 			misc.setRiotModeEnabled(true)
 		end,
@@ -193,12 +193,12 @@ local function streets(menu: Menu)
 end
 
 local function around(menu: Menu)
-	menu:separator("Around you")
-	bind.command(menu, "world.clear", "Clear the area", { note = "Vehicles, people, objects and fires within 100 m", action = "Clear" }, function(): string?
+	menu:separator("Xung quanh bạn")
+	bind.command(menu, "world.clear", "Dọn sạch khu vực", { note = "Xóa xe, người, vật thể và lửa trong bán kính 100 m", action = "Dọn" }, function(): string?
 		misc.clearArea(game.position(), 100, true, false, false, false)
 		return nil
 	end)
-	bind.command(menu, "world.knockOut", "Knock out everyone", { note = "People within 100 m, not players", action = "Run" }, function(): string?
+	bind.command(menu, "world.knockOut", "Hạ gục mọi người", { note = "NPC trong bán kính 100 m (trừ người chơi)", action = "Chạy" }, function(): string?
 		local count = 0
 		for _, p in world.nearby("peds", game.me(), 100) do
 			if not ped.isPedAPlayer(p) and not ped.isPedDeadOrDying(p, true) then
@@ -206,9 +206,9 @@ local function around(menu: Menu)
 				count += 1
 			end
 		end
-		return `{count} people`
+		return `{count} người`
 	end)
-	bind.command(menu, "world.disarm", "Disarm everyone", { note = "People within 100 m, not players", action = "Run" }, function(): string?
+	bind.command(menu, "world.disarm", "Tước vũ khí mọi người", { note = "NPC trong bán kính 100 m (trừ người chơi)", action = "Chạy" }, function(): string?
 		for _, p in world.nearby("peds", game.me(), 100) do
 			if not ped.isPedAPlayer(p) then
 				weapon.removeAllPedWeapons(p, true)
@@ -216,7 +216,7 @@ local function around(menu: Menu)
 		end
 		return nil
 	end)
-	bind.command(menu, "world.explode", "Blow up the vehicles", { note = "Within 100 m, not yours", action = "Boom" }, function(): string?
+	bind.command(menu, "world.explode", "Cho nổ mọi xe xung quanh", { note = "Trong bán kính 100 m (trừ xe bạn)", action = "Nổ tung" }, function(): string?
 		local mine = game.vehicle()
 		local count = 0
 		for _, car in world.nearby("vehicles", game.me(), 100) do
@@ -225,9 +225,9 @@ local function around(menu: Menu)
 				count += 1
 			end
 		end
-		return `{count} vehicles`
+		return `{count} phương tiện`
 	end)
-	bind.command(menu, "world.launch", "Launch the vehicles", { note = "Within 100 m, up in the air", action = "Launch" }, function(): string?
+	bind.command(menu, "world.launch", "Hất tung mọi xe lên trời", { note = "Trong bán kính 100 m", action = "Phóng" }, function(): string?
 		local mine = game.vehicle()
 		for _, car in world.nearby("vehicles", game.me(), 100) do
 			if car ~= mine then
@@ -241,26 +241,48 @@ end
 -- The sky's clouds (clouds.xml's cloud hats), a light around you, the ocean's waves, the
 -- interior you are in redrawn.
 local function sky(menu: Menu)
-	menu:separator("Sky and light")
-	local hats = { "Clear sky", "Cloudy 01", "Rain", "Horizon", "Horizonband1", "Snowy 01", "Stormy 01", "Overcast", "Shower", "Stripey", "Wispy", "Altostratus", "Cirrus", "Cirrocumulus", "Nimbus", "Puffs", "Contrails" }
-	menu:choice("Clouds", hats, 1, "The sky's clouds now", bind.safe("Clouds", function(i: number, name: string)
+	menu:separator("Bầu trời và ánh sáng")
+	local cloudChoices = {
+		{ "Trời quang", "Clear sky" },
+		{ "Nhiều mây 01", "Cloudy 01" },
+		{ "Mưa", "Rain" },
+		{ "Chân trời", "Horizon" },
+		{ "Dải mây chân trời", "Horizonband1" },
+		{ "Tuyết 01", "Snowy 01" },
+		{ "Giông bão 01", "Stormy 01" },
+		{ "Âm u", "Overcast" },
+		{ "Mưa rào", "Shower" },
+		{ "Mây sọc", "Stripey" },
+		{ "Mây mỏng", "Wispy" },
+		{ "Mây trung tầng", "Altostratus" },
+		{ "Mây ti", "Cirrus" },
+		{ "Mây ti tích", "Cirrocumulus" },
+		{ "Mây vũ tích", "Nimbus" },
+		{ "Mây cụm", "Puffs" },
+		{ "Vệt mây máy bay", "Contrails" },
+	}
+	local hats = {}
+	for _, c in cloudChoices do
+		table.insert(hats, c[1])
+	end
+	menu:choice("Đám mây", hats, 1, "Kiểu mây trên bầu trời hiện tại", bind.safe("Đám mây", function(i: number)
 		misc.unloadAllCloudHats()
 		if i > 1 then
-			misc.loadCloudHat(name, 2)
+			misc.loadCloudHat(cloudChoices[i][2], 2)
 		end
 	end))
-	bind.feature(menu, "world.torch", "Light around you", "A lamp that follows you at night", {
+	bind.feature(menu, "world.torch", "Đèn chiếu sáng quanh người", "Nguồn sáng đi theo bạn vào ban đêm", {
 		tick = function()
 			graphics.drawLightWithRange(game.position() + vector.create(0, 0, 1.5), 255, 240, 220, 12, 2)
 		end,
 	})
-	bind.slider(menu, "world.ocean", "Ocean waves", 1, 0, 3, { step = 0.1, unit = "×", note = "The open sea's" }, function(v)
+	bind.slider(menu, "world.ocean", "Độ cao sóng biển", 1, 0, 3, { step = 0.1, unit = "×", note = "Sóng ngoài khơi xa" }, function(v)
 		water.setDeepOceanScaler(v)
 	end)
-	bind.command(menu, "world.refreshInterior", "Redraw this interior", { note = "Fixes one that loaded wrong", action = "Redraw" }, function(): string?
+	bind.command(menu, "world.refreshInterior", "Vẽ lại nội thất hiện tại", { note = "Sửa lỗi nội thất tải sai", action = "Vẽ lại" }, function(): string?
 		local room = interior.getInteriorFromEntity(game.me())
 		if not room then
-			return "You are not inside"
+			return "Bạn không ở trong tòa nhà nào"
 		end
 		interior.refreshInterior(room)
 		return nil
@@ -269,17 +291,17 @@ end
 
 -- Trains: get on one, set its speed.
 local function trains(menu: Menu)
-	menu:separator("Trains")
-	bind.command(menu, "world.train", "Get on the nearest train", { note = "Within 500 m, in the driver's cab", action = "Get on" }, function(): string?
+	menu:separator("Tàu hỏa")
+	bind.command(menu, "world.train", "Lên tàu hỏa gần nhất", { note = "Trong bán kính 500 m, ngồi vào buồng lái", action = "Lên tàu" }, function(): string?
 		for _, car in world.nearby("vehicles", game.me(), 500) do
 			if vehicle.isThisModelATrain(entity.getEntityModel(car)) and vehicle.isVehicleSeatFree(car, VehicleSeat.DRIVER, false) then
 				ped.setPedIntoVehicle(game.me(), car, VehicleSeat.DRIVER)
 				return nil
 			end
 		end
-		return "No train nearby"
+		return "Không có tàu hỏa nào ở gần"
 	end)
-	bind.slider(menu, "world.trainSpeed", "Train speed", 15, 0, 60, { step = 5, unit = "m/s", note = "The train you are on" }, function(v)
+	bind.slider(menu, "world.trainSpeed", "Tốc độ tàu hỏa", 15, 0, 60, { step = 5, unit = "m/s", note = "Đoàn tàu bạn đang ngồi" }, function(v)
 		local me = game.me()
 		if ped.isPedInAnyTrain(me) then
 			local train = ped.getVehiclePedIsIn(me, false)
@@ -292,7 +314,7 @@ end
 -- What falls from the sky: rocks that burst into flames, fireworks, vehicles, people; and a
 -- black hole that swallows what is near it. All here, on this game only.
 local function fun(root: Menu)
-	local menu = root:submenu("Mayhem", "Meteors, fireworks, a black hole, vehicles and people from the sky")
+	local menu = root:submenu("Hỗn loạn", "Mưa thiên thạch, pháo hoa, hố đen, mưa xe cộ và người")
 	-- A random point within `r` of the player, `up` metres high.
 	local function above(r: number, up: number): vector
 		local at = game.position()
@@ -315,7 +337,7 @@ local function fun(root: Menu)
 			object.deleteObject(m.rock)
 		end
 	end
-	bind.feature(menu, "world.meteors", "Meteor shower", "Burning rocks fall from the sky around you", bind.storyOnly({
+	bind.feature(menu, "world.meteors", "Mưa thiên thạch", "Đá rực lửa lao từ trên trời xuống quanh bạn", bind.storyOnly({
 		tick = function()
 			local now = os.clock()
 			for i = #falling, 1, -1 do
@@ -365,7 +387,7 @@ local function fun(root: Menu)
 		end,
 	}))
 	local nextFirework = 0
-	bind.feature(menu, "world.fireworks", "Fireworks", "Over your head", {
+	bind.feature(menu, "world.fireworks", "Pháo hoa trên trời", "Bắn pháo hoa ngay trên đầu bạn", {
 		tick = function()
 			if os.clock() < nextFirework then
 				return
@@ -388,7 +410,7 @@ local function fun(root: Menu)
 	})
 	-- Pulls what is within 80 m to a point 40 m ahead of where it was made, and swallows it.
 	local hole: vector? = nil
-	bind.feature(menu, "world.blackHole", "Black hole", "Everything near it is pulled in", bind.storyOnly({
+	bind.feature(menu, "world.blackHole", "Hố đen vũ trụ", "Hút mọi thứ xung quanh vào tâm hố đen", bind.storyOnly({
 		on = function()
 			local me = game.me()
 			hole = entity.getEntityCoords(me, true) + entity.getEntityForwardVector(me) * 40 + vector.create(0, 0, 15)
@@ -424,10 +446,10 @@ local function fun(root: Menu)
 		end,
 	}))
 	-- Vehicles or people from the sky, a few a second, the oldest let go after 30.
-	local rain = bind.choice(menu, "world.rainOf", "Rain of", { "Vehicles", "People" }, "Vehicles", "What Raining down drops")
+	local rain = bind.choice(menu, "world.rainOf", "Mưa rơi", { "Phương tiện", "Người dân" }, "Phương tiện", "Thứ rơi xuống khi bật Mưa từ trên trời")
 	local dropped: { Entity } = {}
 	local nextDrop = 0
-	bind.feature(menu, "world.rain", "Raining down", "From the sky, around you", bind.storyOnly({
+	bind.feature(menu, "world.rain", "Mưa từ trên trời", "Rơi từ bầu trời xuống xung quanh bạn", bind.storyOnly({
 		tick = function()
 			if os.clock() < nextDrop then
 				return
@@ -477,7 +499,7 @@ end
 
 -- People who follow and protect you: any ped of the game, with any weapon.
 local function bodyguards(root: Menu)
-	local menu = root:submenu("Bodyguards", "Any ped of the game, armed, by your side")
+	local menu = root:submenu("Vệ sĩ", "Bất kỳ nhân vật nào trong game, trang bị súng, đi theo bảo vệ bạn")
 	local guards: { Ped } = {}
 	local built = false
 	local function dismiss()
@@ -490,12 +512,12 @@ local function bodyguards(root: Menu)
 		guards = {}
 	end
 	mod.onStop(dismiss)
-	menu:onOpen(bind.safe("Bodyguards", function()
+	menu:onOpen(bind.safe("Vệ sĩ", function()
 		if built then
 			return
 		end
 		local peds = catalog.peds()
-		local weapons = { "Unarmed" }
+		local weapons = { "Tay không" }
 		for _, w in catalog.weapons() do
 			table.insert(weapons, w.model)
 		end
@@ -503,12 +525,12 @@ local function bodyguards(root: Menu)
 			return
 		end
 		built = true
-		local modelItem = menu:choice("Model", peds, if table.find(peds, "s_m_y_swat_01") then "s_m_y_swat_01" else 1)
-		local weaponItem = menu:choice("Weapon", weapons, if table.find(weapons, "WEAPON_CARBINERIFLE") then "WEAPON_CARBINERIFLE" else 1)
-		bind.action(menu, "Call one", { action = "Call" }, function(): string?
+		local modelItem = menu:choice("Nhân vật", peds, if table.find(peds, "s_m_y_swat_01") then "s_m_y_swat_01" else 1)
+		local weaponItem = menu:choice("Vũ khí", weapons, if table.find(weapons, "WEAPON_CARBINERIFLE") then "WEAPON_CARBINERIFLE" else 1)
+		bind.action(menu, "Gọi một vệ sĩ", { action = "Gọi" }, function(): string?
 			local hash = joaat(modelItem.option)
 			if not streaming.load(hash) then
-				return "That model did not load"
+				return "Không tải được mô hình nhân vật này"
 			end
 			local me = game.me()
 			local at = entity.getOffsetFromEntityInWorldCoords(me, vector.create(math.random(-3, 3), -2, 0))
@@ -516,7 +538,7 @@ local function bodyguards(root: Menu)
 			local g = ped.createPed(26, hash, at, entity.getEntityHeading(me), game.online(), false)
 			streaming.setModelAsNoLongerNeeded(hash)
 			if not g then
-				return "The game made none"
+				return "Game không tạo được vệ sĩ"
 			end
 			ped.setPedAsGroupMember(g, player.getPlayerGroup(game.player()))
 			ped.setPedNeverLeavesGroup(g, true)
@@ -526,9 +548,9 @@ local function bodyguards(root: Menu)
 				weapon.giveWeaponToPed(g, joaat(weaponItem.option), 9999, false, true)
 			end
 			table.insert(guards, g)
-			return `{#guards} by your side`
+			return `{#guards} vệ sĩ bên cạnh bạn`
 		end)
-		bind.action(menu, "Dismiss them", { action = "Dismiss" }, function(): string?
+		bind.action(menu, "Giải tán vệ sĩ", { action = "Giải tán" }, function(): string?
 			dismiss()
 			return nil
 		end)
@@ -536,7 +558,7 @@ local function bodyguards(root: Menu)
 end
 
 function M.build(root: Menu)
-	local menu = root:submenu("World", "Time, weather, filters, traffic, police, the area around, trains, bodyguards, mayhem")
+	local menu = root:submenu("Thế giới", "Thời gian, thời tiết, bộ lọc, giao thông, cảnh sát, xung quanh, tàu hỏa, vệ sĩ, hỗn loạn")
 	time(menu)
 	weather(menu)
 	filters(menu)

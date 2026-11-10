@@ -107,8 +107,8 @@ pub(crate) fn ModPage(s: S, name: String) -> impl IntoView {
                                 // Its folder, unless the name says it already.
                                 let mut parts = Vec::new();
                                 if !title.get().eq_ignore_ascii_case(&name) { parts.push(name.clone()); }
-                                if !version.get().is_empty() { parts.push(format!("version {}", version.get())); }
-                                if !author.get().is_empty() { parts.push(format!("by {}", author.get())); }
+                                if !version.get().is_empty() { parts.push(format!("phiên bản {}", version.get())); }
+                                if !author.get().is_empty() { parts.push(format!("tác giả {}", author.get())); }
                                 parts.join(" · ")
                             }
                         }</div>
@@ -116,9 +116,9 @@ pub(crate) fn ModPage(s: S, name: String) -> impl IntoView {
                     <div class="grow"></div>
                     {move || state().map(|m| {
                         let (class, text) = match m.state.as_str() {
-                            "running" => ("pill ok", format!("Running · {:.1} ms", m.cpu_ms)),
-                            "error" => ("pill err", "Error".to_string()),
-                            _ => ("pill", "Stopped".to_string()),
+                            "running" => ("pill ok", format!("Đang chạy · {:.1} ms", m.cpu_ms)),
+                            "error" => ("pill err", "Lỗi".to_string()),
+                            _ => ("pill", "Đã dừng".to_string()),
                         };
                         view! { <span class=class>{text}</span> }
                     })}
@@ -126,40 +126,40 @@ pub(crate) fn ModPage(s: S, name: String) -> impl IntoView {
                 // Why it stopped, when it failed (a phone has no hover for the list's).
                 {move || failed().map(|e| view! { <div class="mp-error">{crate::panel::linked(s, e)}</div> })}
                 <div class="mp-card">
-                    <h2>"MOD"</h2>
-                    {field("Name", "As the game's Mods page shows it", title, false, 40)}
+                    <h2>"THÔNG TIN MOD"</h2>
+                    {field("Tên", "Hiển thị tại trang Bản mod trong game", title, false, 40)}
                     <div class="mp-row">
-                        <div class="lab"><b>"Description"</b><small>"One or two lines"</small></div>
+                        <div class="lab"><b>"Mô tả"</b><small>"Một hoặc hai dòng"</small></div>
                         <textarea class="f" maxlength="300" prop:value=move || description.get()
                             on:input=move |ev| description.set(event_target_value(&ev))
                             on:change=move |_| save_d()></textarea>
                     </div>
-                    {field("Author", "", author, false, 60)}
-                    {field("Version", "", version, true, 20)}
+                    {field("Tác giả", "", author, false, 60)}
+                    {field("Phiên bản", "", version, true, 20)}
                 </div>
                 <div class="mp-card">
-                    <h2>"RUNNING"</h2>
+                    <h2>"KHỞI CHẠY"</h2>
                     <div class="mp-row">
-                        <div class="lab"><b>"Starts with the game"</b><small>"Otherwise from the Mods page or here"</small></div>
+                        <div class="lab"><b>"Chạy cùng trò chơi"</b><small>"Hoặc bật thủ công từ Bản mod hay tại đây"</small></div>
                         <label class="switch"><input type="checkbox" prop:checked=move || autostart.get()
                             on:change=move |ev| { autostart.set(event_target_checked(&ev)); save_a(); }/><i></i></label>
                     </div>
                     <div class="mp-row">
-                        <div class="lab"><b>"Restart when a file is saved"</b><small>"While it runs: saving reloads it at once"</small></div>
+                        <div class="lab"><b>"Khởi động lại khi lưu tệp"</b><small>"Khi đang chạy: lưu mã sẽ nạp lại ngay"</small></div>
                         <label class="switch"><input type="checkbox" prop:checked=move || restart.get()
                             on:change=move |ev| { restart.set(event_target_checked(&ev)); save_r(); }/><i></i></label>
                     </div>
                 </div>
                 <div class="mp-card">
-                    <h2>"STORED DATA"</h2>
+                    <h2>"DỮ LIỆU LƯU TRỮ"</h2>
                     <div class="mp-row">
                         <div class="lab">
                             <b>{move || match stored.get() {
-                                (0, _) => "Nothing stored".to_string(),
-                                (1, b) => format!("1 key · {}", size(b)),
-                                (k, b) => format!("{k} keys · {}", size(b)),
+                                (0, _) => "Chưa lưu dữ liệu".to_string(),
+                                (1, b) => format!("1 khóa · {}", size(b)),
+                                (k, b) => format!("{k} khóa · {}", size(b)),
                             }}</b>
-                            <small>"What it keeps between sessions (storage), for this player only"</small>
+                            <small>"Dữ liệu lưu giữ giữa các phiên chơi (storage), riêng cho người chơi này"</small>
                         </div>
                         <button class="btn" disabled=move || stored.get().0 == 0 && view_data.get().is_none() on:click=move |_| {
                             if view_data.get_untracked().is_some() { view_data.set(None); return; }
@@ -167,34 +167,34 @@ pub(crate) fn ModPage(s: S, name: String) -> impl IntoView {
                                 let pretty = serde_json::from_str::<Value>(&t).ok().and_then(|v| serde_json::to_string_pretty(&v).ok()).unwrap_or(t);
                                 view_data.set(Some(pretty));
                             });
-                        }>{move || if view_data.get().is_some() { "Hide" } else { "View" }}</button>
+                        }>{move || if view_data.get().is_some() { "Ẩn" } else { "Xem" }}</button>
                         <button class="btn" disabled=move || stored.get().0 == 0 on:click=move |_| {
-                            let ok = web_sys::window().and_then(|w| w.confirm_with_message("Clear what this mod stored? It cannot be undone.").ok()).unwrap_or(false);
+                            let ok = web_sys::window().and_then(|w| w.confirm_with_message("Xóa dữ liệu đã lưu của mod này? Không thể hoàn tác.").ok()).unwrap_or(false);
                             if !ok { return; }
                             let load = load.clone();
                             request("storage.clear", json!({ "mod": n_clear.clone() }), move |_| { view_data.set(None); load(); });
-                        }>"Clear"</button>
+                        }>"Xóa"</button>
                     </div>
                     {move || view_data.get().map(|t| view! { <pre class="mp-data">{t}</pre> })}
                 </div>
                 <div class="mp-card">
-                    <h2>"USE"</h2>
+                    <h2>"SỬ DỤNG"</h2>
                     <div class="mp-row">
-                        <div class="lab"><b>"Control page"</b><small>"Its menus on a page of their own: on a phone, or beside the game"</small></div>
-                        <button class="btn" on:click={ let n = n_control.clone(); move |_| crate::sidebar::open_control(&n) }>"Open"</button>
+                        <div class="lab"><b>"Trang điều khiển"</b><small>"Hiển thị menu trên trang riêng cho điện thoại hoặc màn hình phụ"</small></div>
+                        <button class="btn" on:click={ let n = n_control.clone(); move |_| crate::sidebar::open_control(&n) }>"Mở"</button>
                     </div>
                 </div>
                 <div class="mp-card">
-                    <h2>"SHARE"</h2>
+                    <h2>"CHIA SẺ"</h2>
                     <div class="mp-row">
-                        <div class="lab"><b>"Export"</b><small>"A .zip with its files and this page, without the stored data"</small></div>
-                        <a class="btn" href=export download="">"Download .zip"</a>
+                        <div class="lab"><b>"Xuất bản mod"</b><small>"Đóng gói tệp .zip chứa mã nguồn (không kèm dữ liệu lưu)"</small></div>
+                        <a class="btn" href=export download="">"Tải .zip"</a>
                     </div>
                 </div>
                 <div class="mp-actions">
                     <button class="btn danger" on:click=move |_| {
                         let ok = web_sys::window()
-                            .and_then(|w| w.confirm_with_message(&format!("Delete the mod {n_delete}, its files and what it stored? It cannot be undone.")).ok())
+                            .and_then(|w| w.confirm_with_message(&format!("Xóa bản mod {n_delete}, mọi tệp và dữ liệu lưu của nó? Không thể hoàn tác.")).ok())
                             .unwrap_or(false);
                         if !ok { return; }
                         let n = n_delete.clone();
@@ -202,7 +202,7 @@ pub(crate) fn ModPage(s: S, name: String) -> impl IntoView {
                             Ok(_) => close_mod(s, &n),
                             Err(e) => s.notice.set(Some(e)),
                         });
-                    }>"Delete mod…"</button>
+                    }>"Xóa bản mod…"</button>
                 </div>
             </div>
         </div>

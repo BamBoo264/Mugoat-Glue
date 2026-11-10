@@ -51,7 +51,7 @@ function M.vehicleClasses(): { VehicleClass }
 	local classes: { VehicleClass } = {}
 	for _, v in M.vehicles() do
 		if not byClass[v.class] then
-			local c = { class = v.class, name = game.label(`VEH_CLASS_{v.class}`, `Class {v.class}`), vehicles = {} }
+			local c = { class = v.class, name = game.label(`VEH_CLASS_{v.class}`, `Phân loại {v.class}`), vehicles = {} }
 			byClass[v.class] = c
 			table.insert(classes, c)
 		end
@@ -161,7 +161,7 @@ function M.components(w: WeaponEntry): { Component }
 			for c = 0, extrametadata.getNumDlcWeaponComponents(i) - 1 do
 				local comp = extrametadata.getDlcWeaponComponentData(i, c)
 				if comp and not comp.isDefault then
-					add(comp.component, game.label(comp.nameLabel, string.format("Part %08X", comp.component)))
+					add(comp.component, game.label(comp.nameLabel, string.format("Phụ kiện %08X", comp.component)))
 				end
 			end
 		end

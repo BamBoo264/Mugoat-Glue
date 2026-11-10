@@ -181,9 +181,9 @@ pub fn note_failure() -> Option<String> {
     let _ = std::fs::create_dir_all(dir.join(".glue5"));
     let _ = std::fs::write(dir.join(".glue5/failed.json"), note.to_string());
     Some(match (during.is_empty(), native) {
-        (false, Some(n)) => format!("Mod {during} was calling {n}."),
-        (false, None) => format!("Mod {during} was running."),
-        _ => format!("Mods running: {}.", running.join(", ")),
+        (false, Some(n)) => format!("Mod {during} đang gọi hàm {n}."),
+        (false, None) => format!("Mod {during} đang chạy."),
+        _ => format!("Các mod đang chạy: {}.", running.join(", ")),
     })
 }
 
@@ -224,10 +224,10 @@ pub fn install(dir: &Path) {
         let names: Vec<String> =
             v["mods"].as_array().into_iter().flatten().filter_map(|m| m.as_str().map(str::to_string)).collect();
         for n in &names {
-            log_line(n, LogLevel::Error, "the game stopped while this mod ran: it does not start by itself this time");
+            log_line(n, LogLevel::Error, "trò chơi đã dừng khi mod này đang chạy: sẽ không tự khởi chạy lần này");
         }
         if !names.is_empty() {
-            let text = format!("{} did not start: the game stopped while it ran last time.", names.join(", "));
+            let text = format!("{} đã không tự khởi động: trò chơi đã dừng khi mod đang chạy ở lần mở trước.", names.join(", "));
             crate::lock(&SHARED.state).notices.push_back(("mods".into(), text));
         }
         *crate::lock(&HELD_BACK) = names;
@@ -260,7 +260,7 @@ pub fn installed() -> bool {
 
 /// Why a mod cannot be started now, if it cannot.
 pub fn cannot_start() -> Option<&'static str> {
-    (!installed()).then_some("mods run with the game, and it is not running with them: start it (mods on), or mark the mod to start with the game")
+    (!installed()).then_some("mod chỉ chạy cùng trò chơi và hiện trò chơi chưa bật mod: hãy khởi động lại kèm Bản mod hoặc bật tự động chạy")
 }
 
 /// A mod's file was saved (`path`), from the Studio or by an agent: the
@@ -436,7 +436,7 @@ pub fn restart(name: &str) {
 /// as an expression if it is one. `reply` gets the values as text.
 pub fn eval(code: &str, reply: Sender<EvalResult>) {
     if !installed() {
-        let _ = reply.send(Err("the game is not running with mods: they run from the next start".into()));
+        let _ = reply.send(Err("trò chơi hiện đang tắt Bản mod: hãy bật Bản mod và khởi động lại".into()));
         return;
     }
     command(Command::Eval(code.to_string(), reply));

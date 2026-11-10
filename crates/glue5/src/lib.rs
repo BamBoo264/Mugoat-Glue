@@ -52,14 +52,14 @@ pub fn main() -> i32 {
             return;
         }
         let thread = std::thread::current();
-        let what = info.payload_as_str().unwrap_or("panic");
-        glue5_runtime::exit::fail(format!("its {} thread stopped ({what})", thread.name().unwrap_or("unnamed")));
+        let what = info.payload_as_str().unwrap_or("lỗi nghiêm trọng");
+        glue5_runtime::exit::fail(format!("luồng {} đã dừng ({what})", thread.name().unwrap_or("không tên")));
     }));
     match app::run() {
         Ok(()) => 0,
         Err(e) => {
             log::error!("{e:#}");
-            let _ = show_simple_message_box(MessageBoxFlag::ERROR, "Glue 5", &format!("{e:#}"), None);
+            let _ = show_simple_message_box(MessageBoxFlag::ERROR, "Mugoat Glue", &format!("{e:#}"), None);
             1
         }
     }

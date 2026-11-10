@@ -77,7 +77,7 @@ fn lock(root: &Path) -> io::Result<Arc<File>> {
     match f.try_lock() {
         Ok(()) => {}
         Err(std::fs::TryLockError::WouldBlock) => {
-            return Err(io::Error::other("the copy is in use by another Glue 5 (only one can use it at a time)"));
+            return Err(io::Error::other("bản sao đang được dùng bởi một cửa sổ Mugoat Glue khác (mỗi lần chỉ mở được một)"));
         }
         // A file system without locks (some network shares): unlocked.
         Err(std::fs::TryLockError::Error(e)) if e.kind() == io::ErrorKind::Unsupported || e.raw_os_error() == Some(libc_enolck()) => {

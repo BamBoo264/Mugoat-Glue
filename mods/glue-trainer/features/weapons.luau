@@ -31,14 +31,14 @@ local function held(): catalog.WeaponEntry?
 end
 
 local function arsenal(menu: Menu)
-	bind.command(menu, "weapons.giveAll", "Give every weapon", { note = "With full ammo", action = "Give" }, function(): string?
+	bind.command(menu, "weapons.giveAll", "Nhận toàn bộ vũ khí", { note = "Kèm đầy đạn", action = "Nhận" }, function(): string?
 		local all = catalog.weapons()
 		for _, w in all do
 			give(w)
 		end
-		return `{#all} weapons`
+		return `{#all} vũ khí`
 	end)
-	bind.command(menu, "weapons.fill", "Fill ammo", { note = "Every weapon you have", action = "Fill" }, function(): string?
+	bind.command(menu, "weapons.fill", "Nạp đầy đạn", { note = "Mọi vũ khí bạn đang có", action = "Nạp đầy" }, function(): string?
 		local me = game.me()
 		for _, w in catalog.weapons() do
 			if weapon.hasPedGotWeapon(me, w.hash, 0) then
@@ -48,13 +48,13 @@ local function arsenal(menu: Menu)
 		end
 		return nil
 	end)
-	bind.command(menu, "weapons.removeAll", "Remove every weapon", { action = "Remove" }, function(): string?
+	bind.command(menu, "weapons.removeAll", "Xóa toàn bộ vũ khí", { action = "Xóa" }, function(): string?
 		weapon.removeAllPedWeapons(game.me(), true)
 		return nil
 	end)
 	local function fill(target: Menu, weapons: { catalog.WeaponEntry }): boolean
 		for _, w in weapons do
-			bind.action(target, w.name, { note = w.model, action = "Give" }, function(): string?
+			bind.action(target, w.name, { note = w.model, action = "Nhận" }, function(): string?
 				give(w)
 				weapon.setCurrentPedWeapon(game.me(), w.hash, true)
 				return nil
@@ -62,19 +62,19 @@ local function arsenal(menu: Menu)
 		end
 		return #weapons > 0
 	end
-	local pick = menu:submenu("Give one", "By group, or search them all")
-	lists.lazy(pick, "Search all", "Every weapon, by name", function(target)
+	local pick = menu:submenu("Nhận từng món", "Theo phân loại hoặc tìm trong tất cả")
+	lists.lazy(pick, "Tìm trong tất cả", "Toàn bộ vũ khí theo tên", function(target)
 		return fill(target, catalog.weapons())
 	end)
-	pick:separator("Groups")
+	pick:separator("Phân loại")
 	local listed = false
-	pick:onOpen(bind.safe("Weapons", function()
+	pick:onOpen(bind.safe("Vũ khí", function()
 		if listed then
 			return
 		end
 		local groups = catalog.weaponGroups()
 		for _, group in groups do
-			lists.lazy(pick, group.name, `{#group.weapons} weapons`, function(target)
+			lists.lazy(pick, group.name, `{#group.weapons} vũ khí`, function(target)
 				return fill(target, group.weapons)
 			end)
 		end
@@ -84,12 +84,12 @@ end
 
 -- The weapon in your hands: its tint and attachments, as the game has them for it.
 local function inHand(root: Menu)
-	local menu = root:submenu("In your hands", "Attachments and tint of the weapon you hold")
-	menu:onOpen(bind.safe("In your hands", function()
+	local menu = root:submenu("Vũ khí trên tay", "Phụ kiện và màu sơn của vũ khí đang cầm")
+	menu:onOpen(bind.safe("Vũ khí trên tay", function()
 		menu:clear()
 		local w = held()
 		if not w then
-			menu:label("Take a weapon in your hands first.")
+			menu:label("Hãy cầm một vũ khí trên tay trước.")
 			return
 		end
 		local gun = w :: catalog.WeaponEntry
@@ -100,24 +100,24 @@ local function inHand(root: Menu)
 		if tints > 1 then
 			local names = {}
 			for i = 0, tints - 1 do
-				table.insert(names, data.tints[i] or `Tint {i + 1}`)
+				table.insert(names, data.tints[i] or `Màu {i + 1}`)
 			end
-			menu:choice("Tint", names, weapon.getPedWeaponTintIndex(me, gun.hash) + 1, bind.safe("Tint", function(i: number)
+			menu:choice("Màu sơn súng", names, weapon.getPedWeaponTintIndex(me, gun.hash) + 1, bind.safe("Màu sơn súng", function(i: number)
 				weapon.setPedWeaponTintIndex(game.me(), gun.hash, i - 1)
 			end))
 		end
 		local parts = catalog.components(gun)
 		if #parts == 0 then
-			menu:label("It takes no attachments.")
+			menu:label("Vũ khí này không lắp được phụ kiện.")
 			return
 		end
-		bind.action(menu, "Every attachment", { action = "Fit" }, function(): string?
+		bind.action(menu, "Lắp mọi phụ kiện", { action = "Lắp hết" }, function(): string?
 			for _, c in parts do
 				weapon.giveWeaponComponentToPed(game.me(), gun.hash, c.hash)
 			end
 			return nil
 		end)
-		menu:separator("Attachments")
+		menu:separator("Phụ kiện")
 		for _, c in parts do
 			menu:toggle(c.name, weapon.hasPedGotWeaponComponent(me, gun.hash, c.hash), bind.safe(c.name, function(on)
 				if on then
@@ -132,7 +132,7 @@ end
 
 -- Every weapon you have now, with its tint and attachments, to have again.
 local function loadouts(root: Menu)
-	local menu = root:submenu("Loadouts", "Save your weapons, get them back")
+	local menu = root:submenu("Bộ trang bị (Loadout)", "Lưu kho vũ khí để lấy lại bất cứ lúc nào")
 	local function saved(): { Loadout }
 		return storage.get("loadouts") or {}
 	end
@@ -166,7 +166,7 @@ local function loadouts(root: Menu)
 	end
 	local function build()
 		menu:clear()
-		menu:text("Save as", "", { placeholder = "A name, then Enter", max = 40 }, bind.safe("Save as", function(name)
+		menu:text("Lưu thành", "", { placeholder = "Nhập tên rồi Enter", max = 40 }, bind.safe("Lưu thành", function(name)
 			if name == "" then
 				return
 			end
@@ -174,28 +174,28 @@ local function loadouts(root: Menu)
 			table.insert(list, current(name))
 			storage.set("loadouts", list)
 			build()
-			game.notify(`Saved: {name}`)
+			game.notify(`Đã lưu: {name}`)
 		end))
 		local list = saved()
 		if #list == 0 then
-			menu:label("Nothing saved yet.")
+			menu:label("Chưa có bộ trang bị nào được lưu.")
 			return
 		end
-		menu:separator("Equip")
+		menu:separator("Trang bị")
 		for _, l in list do
-			bind.action(menu, l.name, { note = `{#l.weapons} weapons`, action = "Equip" }, function(): string?
+			bind.action(menu, l.name, { note = `{#l.weapons} vũ khí`, action = "Trang bị" }, function(): string?
 				equip(l)
 				return nil
 			end)
 		end
-		local forget = menu:submenu("Delete a loadout")
+		local forget = menu:submenu("Xóa bộ trang bị")
 		for i, l in list do
-			bind.action(forget, l.name, { action = "Delete" }, function(): string?
+			bind.action(forget, l.name, { action = "Xóa" }, function(): string?
 				local all = saved()
 				table.remove(all, i)
 				storage.set("loadouts", all)
 				build()
-				return `Deleted: {l.name}`
+				return `Đã xóa: {l.name}`
 			end)
 		end
 	end
@@ -203,8 +203,8 @@ local function loadouts(root: Menu)
 end
 
 local function ammo(menu: Menu)
-	menu:separator("Ammo")
-	bind.feature(menu, "weapons.infiniteAmmo", "Infinite ammo", "Never runs out", {
+	menu:separator("Đạn dược")
+	bind.feature(menu, "weapons.infiniteAmmo", "Đạn vô hạn", "Bắn không bao giờ hết đạn", {
 		tick = function()
 			local me = game.me()
 			weapon.setPedInfiniteAmmo(me, true, weapon.getSelectedPedWeapon(me))
@@ -216,7 +216,7 @@ local function ammo(menu: Menu)
 			end
 		end,
 	})
-	bind.feature(menu, "weapons.noReload", "No reloading", "The clip never empties", {
+	bind.feature(menu, "weapons.noReload", "Không cần thay đạn", "Băng đạn không bao giờ cạn", {
 		tick = function()
 			weapon.setPedInfiniteAmmoClip(game.me(), true)
 		end,
@@ -224,17 +224,17 @@ local function ammo(menu: Menu)
 			weapon.setPedInfiniteAmmoClip(game.me(), false)
 		end,
 	})
-	bind.feature(menu, "weapons.explosive", "Explosive rounds", nil, {
+	bind.feature(menu, "weapons.explosive", "Đạn nổ", nil, {
 		tick = function()
 			misc.setExplosiveAmmoThisFrame(game.player())
 		end,
 	})
-	bind.feature(menu, "weapons.fire", "Fire rounds", nil, {
+	bind.feature(menu, "weapons.fire", "Đạn lửa", nil, {
 		tick = function()
 			misc.setFireAmmoThisFrame(game.player())
 		end,
 	})
-	bind.feature(menu, "weapons.explosiveMelee", "Explosive punches", nil, {
+	bind.feature(menu, "weapons.explosiveMelee", "Cú đấm phát nổ", nil, {
 		tick = function()
 			misc.setExplosiveMeleeThisFrame(game.player())
 		end,
@@ -242,14 +242,14 @@ local function ammo(menu: Menu)
 end
 
 local function damage(menu: Menu)
-	menu:separator("Damage")
-	bind.slider(menu, "weapons.damage", "Weapon damage", 1, 0.1, 10, { step = 0.1, unit = "×" }, function(v)
+	menu:separator("Sát thương")
+	bind.slider(menu, "weapons.damage", "Sát thương súng", 1, 0.1, 10, { step = 0.1, unit = "×" }, function(v)
 		player.setPlayerWeaponDamageModifier(game.player(), v)
 	end)
-	bind.slider(menu, "weapons.melee", "Melee damage", 1, 0.1, 10, { step = 0.1, unit = "×" }, function(v)
+	bind.slider(menu, "weapons.melee", "Sát thương cận chiến", 1, 0.1, 10, { step = 0.1, unit = "×" }, function(v)
 		player.setPlayerMeleeWeaponDamageModifier(game.player(), v, true)
 	end)
-	bind.slider(menu, "weapons.defense", "Damage taken", 1, 0.1, 2, { step = 0.1, unit = "×", note = "From other people's weapons" }, function(v)
+	bind.slider(menu, "weapons.defense", "Sát thương phải chịu", 1, 0.1, 2, { step = 0.1, unit = "×", note = "Từ vũ khí của người khác" }, function(v)
 		player.setPlayerWeaponDefenseModifier(game.player(), v)
 	end)
 end
@@ -262,11 +262,11 @@ end
 
 -- Guns with a trick: where the shot lands, or what it aims at.
 local function guns(menu: Menu)
-	menu:separator("Trick guns")
+	menu:separator("Súng vui nhộn")
 	local me = function(): Ped
 		return game.me()
 	end
-	bind.feature(menu, "weapons.teleportGun", "Teleport gun", "You go where your shots land", {
+	bind.feature(menu, "weapons.teleportGun", "Súng dịch chuyển", "Bắn tới đâu dịch chuyển tới đó", {
 		tick = function()
 			local hit, at = weapon.getPedLastWeaponImpactCoord(me())
 			if hit then
@@ -280,8 +280,8 @@ local function guns(menu: Menu)
 		table.insert(kinds, name)
 	end
 	table.sort(kinds)
-	local kind = bind.choice(menu, "weapons.explosionKind", "Explosion", kinds, if table.find(kinds, "GRENADE") then "GRENADE" else kinds[1], "What the explosion gun makes")
-	bind.feature(menu, "weapons.explosionGun", "Explosion gun", "Shots explode as you chose", {
+	local kind = bind.choice(menu, "weapons.explosionKind", "Kiểu vụ nổ", kinds, if table.find(kinds, "GRENADE") then "GRENADE" else kinds[1], "Loại vụ nổ mà Súng bắn đạn nổ tạo ra")
+	bind.feature(menu, "weapons.explosionGun", "Súng bắn đạn nổ", "Đạn rơi xuống sẽ phát nổ theo kiểu đã chọn", {
 		tick = function()
 			local hit, at = weapon.getPedLastWeaponImpactCoord(me())
 			if hit then
@@ -289,7 +289,7 @@ local function guns(menu: Menu)
 			end
 		end,
 	})
-	bind.feature(menu, "weapons.deleteGun", "Delete gun", "What you shoot at goes", {
+	bind.feature(menu, "weapons.deleteGun", "Súng xóa vật thể", "Bắn trúng gì là xóa biến mất ngay", {
 		tick = function()
 			if not ped.isPedShooting(me()) then
 				return
@@ -301,7 +301,7 @@ local function guns(menu: Menu)
 			end
 		end,
 	})
-	bind.feature(menu, "weapons.forceGun", "Force gun", "What you shoot at flies away", {
+	bind.feature(menu, "weapons.forceGun", "Súng đẩy lùi", "Bắn trúng gì là thổi bay ra xa", {
 		tick = function()
 			if not ped.isPedShooting(me()) then
 				return
@@ -315,7 +315,7 @@ local function guns(menu: Menu)
 	})
 	-- Held where the camera looks while aiming; thrown when shot.
 	local holding: Entity? = nil
-	bind.feature(menu, "weapons.gravityGun", "Gravity gun", "Aim to lift, shoot to throw", {
+	bind.feature(menu, "weapons.gravityGun", "Súng trọng lực", "Ngắm để nhấc lên không, bắn để ném đi", {
 		tick = function()
 			if not player.isPlayerFreeAiming(game.player()) then
 				holding = nil
@@ -340,7 +340,7 @@ local function guns(menu: Menu)
 			holding = nil
 		end,
 	})
-	bind.feature(menu, "weapons.pedGun", "People gun", "Shoot people of the city", bind.storyOnly({
+	bind.feature(menu, "weapons.pedGun", "Súng bắn ra người", "Bắn ra người đi đường ngẫu nhiên", bind.storyOnly({
 		tick = function()
 			if not ped.isPedShooting(me()) then
 				return
@@ -367,7 +367,7 @@ local function guns(menu: Menu)
 	}))
 	-- Things to throw (those this game has: checked when shot).
 	local THINGS = { "prop_beachball_02", "prop_bowling_ball", "prop_toilet_01", "prop_barrel_02a", "prop_roadcone02a", "prop_byard_floatpile" }
-	bind.feature(menu, "weapons.objectGun", "Object gun", "Shoot balls, barrels, toilets", bind.storyOnly({
+	bind.feature(menu, "weapons.objectGun", "Súng bắn đồ vật", "Bắn ra bóng, thùng phi, bồn cầu", bind.storyOnly({
 		tick = function()
 			if not ped.isPedShooting(me()) then
 				return
@@ -390,7 +390,7 @@ local function guns(menu: Menu)
 			end)
 		end,
 	}))
-	bind.feature(menu, "weapons.reviveGun", "Revive gun", "The dead you shoot get up again", {
+	bind.feature(menu, "weapons.reviveGun", "Súng hồi sinh", "Bắn vào người đã chết để họ đứng dậy", {
 		tick = function()
 			if not ped.isPedShooting(me()) then
 				return
@@ -405,7 +405,7 @@ local function guns(menu: Menu)
 			end
 		end,
 	})
-	bind.feature(menu, "weapons.magnetGun", "Magnet gun", "Aim to pull what is near your aim to it", {
+	bind.feature(menu, "weapons.magnetGun", "Súng nam châm", "Ngắm để hút mọi thứ xung quanh về phía tia ngắm", {
 		tick = function()
 			if not player.isPlayerFreeAiming(game.player()) then
 				return
@@ -431,7 +431,7 @@ local function guns(menu: Menu)
 			end
 		end,
 	})
-	bind.feature(menu, "weapons.paintGun", "Paint gun", "Vehicles you shoot get a new colour", {
+	bind.feature(menu, "weapons.paintGun", "Súng sơn xe", "Xe bị bắn sẽ đổi sang màu ngẫu nhiên", {
 		tick = function()
 			if not ped.isPedShooting(me()) then
 				return
@@ -445,7 +445,7 @@ local function guns(menu: Menu)
 			end
 		end,
 	})
-	bind.feature(menu, "weapons.driveGun", "Drive-it gun", "Shoot a vehicle and you are at its wheel", {
+	bind.feature(menu, "weapons.driveGun", "Súng cướp xe tức thì", "Bắn vào xe nào là dịch chuyển vào ghế lái xe đó", {
 		tick = function()
 			if not ped.isPedShooting(me()) then
 				return
@@ -465,7 +465,7 @@ local function guns(menu: Menu)
 			ped.setPedIntoVehicle(me(), car, VehicleSeat.DRIVER)
 		end,
 	})
-	bind.feature(menu, "weapons.swapGun", "Body-swap gun", "Story mode: become the person you shoot", bind.storyOnly({
+	bind.feature(menu, "weapons.swapGun", "Súng nhập xác", "Chế độ cốt truyện: hóa thân thành người bạn bắn", bind.storyOnly({
 		tick = function()
 			if not ped.isPedShooting(me()) then
 				return
@@ -476,7 +476,7 @@ local function guns(menu: Menu)
 			end
 		end,
 	}))
-	bind.feature(menu, "weapons.vehicleGun", "Vehicle gun", "Shoot cars", bind.storyOnly({
+	bind.feature(menu, "weapons.vehicleGun", "Súng bắn ra xe", "Bắn ra ô tô bay thẳng về trước", bind.storyOnly({
 		tick = function()
 			if not ped.isPedShooting(me()) then
 				return
@@ -512,9 +512,9 @@ local function aimLine(): (vector, vector)
 end
 
 local function aiming(menu: Menu)
-	menu:separator("Aiming")
+	menu:separator("Ngắm bắn")
 	local SNIPERS = joaat("GROUP_SNIPER")
-	bind.feature(menu, "weapons.laser", "Laser sight", "A red line where you aim", {
+	bind.feature(menu, "weapons.laser", "Tia laser ngắm", "Đường tia đỏ chiếu theo hướng ngắm", {
 		tick = function()
 			if not player.isPlayerFreeAiming(game.player()) then
 				return
@@ -525,7 +525,7 @@ local function aiming(menu: Menu)
 	})
 	-- On only while a sniper rifle aims (and off again after: Thermal vision is Self's).
 	local seeing = false
-	bind.feature(menu, "weapons.thermal", "Thermal scope", "Snipers see heat when aiming", {
+	bind.feature(menu, "weapons.thermal", "Ống ngắm tầm nhiệt", "Súng bắn tỉa tự bật tầm nhiệt khi ngắm", {
 		tick = function()
 			local now = player.isPlayerFreeAiming(game.player()) and weapon.getWeapontypeGroup(weapon.getSelectedPedWeapon(game.me())) == SNIPERS
 			if now ~= seeing then
@@ -543,7 +543,7 @@ local function aiming(menu: Menu)
 	-- Shots every frame while the trigger is held, however it is held (keyboard, pad, touch:
 	-- the game shooting counts too, for a moment after each shot).
 	local lastShot = 0
-	bind.feature(menu, "weapons.rapid", "Rapid fire", "A shot every frame while you shoot", {
+	bind.feature(menu, "weapons.rapid", "Bắn siêu nhanh (Rapid fire)", "Bắn liên tục từng khung hình khi giữ cò", {
 		tick = function()
 			local me = game.me()
 			-- 4: guns (not melee or thrown).
@@ -562,7 +562,7 @@ local function aiming(menu: Menu)
 	})
 	-- Slow while aiming; the game's speed again after (only what this feature set).
 	local slowed = false
-	bind.feature(menu, "weapons.slowAim", "Slow motion when aiming", "Time slows down while you aim", {
+	bind.feature(menu, "weapons.slowAim", "Làm chậm khi ngắm", "Thời gian trôi chậm lại trong lúc đang ngắm bắn", {
 		tick = function()
 			local now = player.isPlayerFreeAiming(game.player())
 			if now ~= slowed then
@@ -577,7 +577,7 @@ local function aiming(menu: Menu)
 			end
 		end,
 	})
-	bind.feature(menu, "weapons.shotgun", "Shotgun bullets", "Each shot is eight, spread", {
+	bind.feature(menu, "weapons.shotgun", "Đạn chùm kiểu Shotgun", "Mỗi phát bắn ra 8 viên tỏa rộng", {
 		tick = function()
 			local me = game.me()
 			if not ped.isPedShooting(me) then
@@ -590,7 +590,7 @@ local function aiming(menu: Menu)
 			end
 		end,
 	})
-	bind.feature(menu, "weapons.cartoon", "Cartoon gun", "A clown's puff at the muzzle", {
+	bind.feature(menu, "weapons.cartoon", "Súng hoạt hình", "Phụt khói chú hề ở đầu nòng súng", {
 		tick = function()
 			local me = game.me()
 			if not ped.isPedShooting(me) or not streaming.load("scr_rcbarry2", "ptfx", 0) then
@@ -604,20 +604,20 @@ local function aiming(menu: Menu)
 		end,
 	})
 	-- The game's targeting: SET_PLAYER_TARGETING_MODE's 0-3.
-	menu:choice("Targeting", { "Assisted", "Assisted partial", "Assisted free aim", "Free aim" }, 1, "How aiming picks targets", bind.safe("Targeting", function(i: number)
+	menu:choice("Chế độ ngắm mục tiêu", { "Tự động khóa", "Hỗ trợ một phần", "Tự ngắm nhẹ", "Ngắm tự do (Free aim)" }, 1, "Cách tâm ngắm tự bắt mục tiêu", bind.safe("Chế độ ngắm mục tiêu", function(i: number)
 		player.setPlayerTargetingMode(i - 1)
 	end))
 end
 
 local function parachute(menu: Menu)
-	menu:separator("Parachute")
-	menu:number("Canopy", player.getPlayerParachuteTintIndex(game.player()), { min = 0, max = 7, note = "Its colours" }, bind.safe("Canopy", function(v)
+	menu:separator("Dù lượn")
+	menu:number("Màu dù", player.getPlayerParachuteTintIndex(game.player()), { min = 0, max = 7, note = "Đổi màu tán dù" }, bind.safe("Màu dù", function(v)
 		player.setPlayerParachuteTintIndex(game.player(), v)
 	end))
-	local smoke = menu:color("Smoke colour", { r = 255, g = 255, b = 255 }, bind.safe("Smoke colour", function(c)
+	local smoke = menu:color("Màu khói dù", { r = 255, g = 255, b = 255 }, bind.safe("Màu khói dù", function(c)
 		player.setPlayerParachuteSmokeTrailColor(game.player(), c.r, c.g, c.b)
 	end))
-	bind.feature(menu, "weapons.smoke", "Smoke trail", "Behind you while you fly the parachute", {
+	bind.feature(menu, "weapons.smoke", "Vệt khói dù", "Tỏa khói phía sau lưng khi đang lượn dù", {
 		on = function()
 			local c = smoke.value
 			player.setPlayerParachuteSmokeTrailColor(game.player(), c.r, c.g, c.b)
@@ -630,7 +630,7 @@ local function parachute(menu: Menu)
 end
 
 function M.build(root: Menu)
-	local menu = root:submenu("Weapons", "Every weapon, attachments, loadouts, ammo, damage, aiming, trick guns, parachute")
+	local menu = root:submenu("Vũ khí", "Mọi vũ khí, phụ kiện, bộ trang bị, đạn, sát thương, ngắm bắn, súng vui nhộn, dù lượn")
 	arsenal(menu)
 	inHand(menu)
 	loadouts(menu)

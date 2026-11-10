@@ -21,9 +21,9 @@ pub(crate) fn state_class(m: &ModInfo) -> &'static str {
 pub(crate) fn meta(m: &ModInfo) -> String {
     match m.state.as_str() {
         "running" => format!("{:.1} ms", m.cpu_ms),
-        "error" => "error".into(),
+        "error" => "lỗi".into(),
         _ if m.files.is_empty() => String::new(),
-        _ => "stopped".into(),
+        _ => "đã dừng".into(),
     }
 }
 
@@ -33,19 +33,18 @@ pub(crate) fn ModsView(s: S) -> impl IntoView {
     let running = move || s.mods.get().into_iter().filter(|m| m.state == "running").collect::<Vec<_>>();
     view! {
         <div class="side-head">
-            <h2>"MODS"</h2>
+            <h2>"BẢN MOD"</h2>
             <div class="tools">
-                <button class="icon-btn" title="Import a mod (.zip)" on:click=move |_| import(s)><span class="ico" inner_html=icons::IMPORT></span></button>
-                <button class="icon-btn" title="New mod" on:click=new_mod><span class="ico" inner_html=icons::PLUS></span></button>
-                <button class="icon-btn" title="Stop all" on:click=move |_| {
+                <button class="icon-btn" title="Nhập mod (.zip)" on:click=move |_| import(s)><span class="ico" inner_html=icons::IMPORT></span></button>
+                <button class="icon-btn" title="Mod mới" on:click=new_mod><span class="ico" inner_html=icons::PLUS></span></button>
+                <button class="icon-btn" title="Dừng tất cả" on:click=move |_| {
                     for m in s.mods.get_untracked() { if m.state == "running" { request("mods.stop", json!({"name": m.name}), |_| {}); } }
                 }><span class="ico" inner_html=icons::STOP></span></button>
             </div>
         </div>
-        <div class="section">"In the game"<span class="count">{move || match s.mods.with(Vec::len) {
+        <div class="section">"Trong trò chơi"<span class="count">{move || match s.mods.with(Vec::len) {
                 _ if !s.listed.get() => String::new(),
-                1 => "1 mod".to_string(),
-                n => format!("{n} mods"),
+                n => format!("{n} mod"),
             }}</span></div>
         <div class="tree">
             // Keyed by what a row shows but its time: rows stay (with their
@@ -84,29 +83,29 @@ pub(crate) fn ModsView(s: S) -> impl IntoView {
                         <span class=state_class(&m)></span>
                         <span class="name">{m.title.clone()}{(m.title != m.name).then(|| view! { <small>{m.name.clone()}</small> })}</span>
                         <span class=if m.state == "error" { "meta err" } else { "meta" }>{figure}</span>
-                        <button class="runbtn" title=if m.state == "running" { "Stop" } else { "Start" } on:click=run>
+                        <button class="runbtn" title=if m.state == "running" { "Dừng" } else { "Chạy" } on:click=run>
                             <span class="ico" inner_html=if m.state == "running" { icons::STOP } else { icons::PLAY }></span>
                         </button>
                     </div>
                     <Show when=open2>
                         {file_tree(s, &name, &files, "", 0)}
                         <div class="file new" on:click={ let n = name.clone(); move |_| new_file(s, &n) }>
-                            <span class="ico small" inner_html=icons::PLUS></span><span>"New file"</span>
+                            <span class="ico small" inner_html=icons::PLUS></span><span>"Tệp mới"</span>
                         </div>
                         <div class="file new" on:click={ let n = name.clone(); move |_| new_folder(s, &n) }>
-                            <span class="ico small" inner_html=icons::FOLDER></span><span>"New folder"</span>
+                            <span class="ico small" inner_html=icons::FOLDER></span><span>"Thư mục mới"</span>
                         </div>
                     </Show>
                 }
             }}</For>
             <Show when=move || s.listed.get() && s.mods.with(Vec::is_empty)>
-                <p class="empty">"No mods yet. Make one with +, or have an AI agent make one (the welcome page connects it)."</p>
+                <p class="empty">"Chưa có mod nào. Tạo mới bằng nút +, hoặc kết nối AI agent ở trang chào mừng."</p>
             </Show>
         </div>
         <Show when=move || !running().is_empty()>
-            <div class="section">"Running"<span class="count">{move || {
+            <div class="section">"Đang chạy"<span class="count">{move || {
                 let r = running();
-                format!("{} · {:.1} ms/frame", r.len(), r.iter().map(|m| m.cpu_ms).fold(0.0, |a, b| a + b))
+                format!("{} · {:.1} ms/khung", r.len(), r.iter().map(|m| m.cpu_ms).fold(0.0, |a, b| a + b))
             }}</span></div>
             <div class="running">
                 <For each=running key=|m| format!("{}|{}", m.name, m.waiting) let(m)>{{
@@ -119,13 +118,13 @@ pub(crate) fn ModsView(s: S) -> impl IntoView {
                             <div class="job-top">
                                 <span class=state_class(&m)></span>
                                 <span class="name">{m.name.clone()}</span>
-                                <span class="pill ok">{if m.waiting { "Waiting" } else { "Running" }}</span>
+                                <span class="pill ok">{if m.waiting { "Đang chờ" } else { "Đang chạy" }}</span>
                             </div>
                             <div class="job-sub">
                                 <span>{move || format!("{:.1} ms", cpu.get())}</span>
                                 <div class="meter"><i style=move || format!("width:{}%", (cpu.get() / 2.0 * 100.0).min(100.0))></i></div>
-                                <button class="icon-btn" title="Restart" on:click=move |_| request("mods.restart", json!({"name": n1}), |_| {})><span class="ico" inner_html=icons::RESTART></span></button>
-                                <button class="icon-btn" title="Stop" on:click=move |_| request("mods.stop", json!({"name": n2}), |_| {})><span class="ico" inner_html=icons::STOP></span></button>
+                                <button class="icon-btn" title="Khởi động lại" on:click=move |_| request("mods.restart", json!({"name": n1}), |_| {})><span class="ico" inner_html=icons::RESTART></span></button>
+                                <button class="icon-btn" title="Dừng" on:click=move |_| request("mods.stop", json!({"name": n2}), |_| {})><span class="ico" inner_html=icons::STOP></span></button>
                             </div>
                         </div>
                     }
@@ -134,7 +133,7 @@ pub(crate) fn ModsView(s: S) -> impl IntoView {
         </Show>
         <div class="side-foot" on:click=move |_| open_file(s, "natives.d.luau".into())>
             <span class="ico small" inner_html=icons::BOOK></span>
-            <span>{move || s.hello.with(|h| format!("{} natives · {} namespaces", h["natives"], h["namespaces"]))}</span>
+            <span>{move || s.hello.with(|h| format!("{} hàm native · {} nhóm", h["natives"], h["namespaces"]))}</span>
         </div>
     }
 }
@@ -193,15 +192,15 @@ pub(crate) fn ContextMenu(s: S) -> impl IntoView {
             let export = format!("/export?mod={n}&token={token}");
             view! {
                 <div class="ctx" role="menu" aria-label=format!("{n}") style=format!("left:{left}px;top:{top}px")>
-                    {item("Open control page", { let n = n.clone(); Box::new(move || open_control(&n)) })}
-                    {item("Mod page", { let n = n.clone(); Box::new(move || open_mod_page(s, &n)) })}
+                    {item("Mở trang điều khiển", { let n = n.clone(); Box::new(move || open_control(&n)) })}
+                    {item("Trang thông tin mod", { let n = n.clone(); Box::new(move || open_mod_page(s, &n)) })}
                     <div class="ctx-sep"></div>
-                    {item(if running { "Stop" } else { "Start" }, start)}
-                    {running.then(|| item("Restart", { let n = n.clone(); Box::new(move || request("mods.restart", json!({ "name": n }), move |r| if let Err(e) = r { s.notice.set(Some(e)) })) }))}
+                    {item(if running { "Dừng" } else { "Chạy" }, start)}
+                    {running.then(|| item("Khởi động lại", { let n = n.clone(); Box::new(move || request("mods.restart", json!({ "name": n }), move |r| if let Err(e) = r { s.notice.set(Some(e)) })) }))}
                     <div class="ctx-sep"></div>
-                    {item("New file…", { let n = n.clone(); Box::new(move || new_file(s, &n)) })}
-                    {item("New folder…", { let n = n.clone(); Box::new(move || new_folder(s, &n)) })}
-                    {item("Export as .zip", Box::new(move || { if let Some(w) = web_sys::window() { let _ = w.location().set_href(&export); } }))}
+                    {item("Tệp mới…", { let n = n.clone(); Box::new(move || new_file(s, &n)) })}
+                    {item("Thư mục mới…", { let n = n.clone(); Box::new(move || new_folder(s, &n)) })}
+                    {item("Xuất thành .zip", Box::new(move || { if let Some(w) = web_sys::window() { let _ = w.location().set_href(&export); } }))}
                 </div>
             }
         })
@@ -307,13 +306,13 @@ fn file_tree(s: S, name: &str, files: &[String], dir: &str, depth: usize) -> Any
                 <span class="fname">{folder.clone()}<i class="fold">{ let o = open.clone(); move || if o() { " ▾" } else { " ▸" } }</i></span>
                 <span></span>
                 <span class="file-acts">
-                    <button class="icon-btn" title="New file here" on:click={ let p = path.clone(); move |ev: leptos::ev::MouseEvent| { ev.stop_propagation(); new_file(s, &p) } }>
+                    <button class="icon-btn" title="Tệp mới tại đây" on:click={ let p = path.clone(); move |ev: leptos::ev::MouseEvent| { ev.stop_propagation(); new_file(s, &p) } }>
                         <span class="ico" inner_html=icons::PLUS></span>
                     </button>
-                    <button class="icon-btn" title="Rename or move" on:click={ let p = path.clone(); move |ev: leptos::ev::MouseEvent| { ev.stop_propagation(); rename_file(s, &p) } }>
+                    <button class="icon-btn" title="Đổi tên hoặc di chuyển" on:click={ let p = path.clone(); move |ev: leptos::ev::MouseEvent| { ev.stop_propagation(); rename_file(s, &p) } }>
                         <span class="ico" inner_html=icons::PENCIL></span>
                     </button>
-                    <button class="icon-btn" title="Delete the folder" on:click={ let p = path.clone(); move |ev: leptos::ev::MouseEvent| { ev.stop_propagation(); delete_file(s, &p, true) } }>
+                    <button class="icon-btn" title="Xóa thư mục" on:click={ let p = path.clone(); move |ev: leptos::ev::MouseEvent| { ev.stop_propagation(); delete_file(s, &p, true) } }>
                         <span class="ico" inner_html=icons::TRASH></span>
                     </button>
                 </span>
@@ -340,10 +339,10 @@ fn file_tree(s: S, name: &str, files: &[String], dir: &str, depth: usize) -> Any
                 <span class="fname">{shown}</span>
                 <span class="err-count">{move || match errs() { 0 => String::new(), n => n.to_string() }}</span>
                 <span class="file-acts">
-                    <button class="icon-btn" title="Rename or move" on:click={ let p = path.clone(); move |ev: leptos::ev::MouseEvent| { ev.stop_propagation(); rename_file(s, &p) } }>
+                    <button class="icon-btn" title="Đổi tên hoặc di chuyển" on:click={ let p = path.clone(); move |ev: leptos::ev::MouseEvent| { ev.stop_propagation(); rename_file(s, &p) } }>
                         <span class="ico" inner_html=icons::PENCIL></span>
                     </button>
-                    <button class="icon-btn" title="Delete" on:click={ let p = path.clone(); move |ev: leptos::ev::MouseEvent| { ev.stop_propagation(); delete_file(s, &p, false) } }>
+                    <button class="icon-btn" title="Xóa" on:click={ let p = path.clone(); move |ev: leptos::ev::MouseEvent| { ev.stop_propagation(); delete_file(s, &p, false) } }>
                         <span class="ico" inner_html=icons::TRASH></span>
                     </button>
                 </span>
@@ -373,10 +372,10 @@ pub(crate) fn NativesView(s: S) -> impl IntoView {
         });
     };
     view! {
-        <div class="side-head"><h2>"NATIVES"</h2></div>
+        <div class="side-head"><h2>"HÀM NATIVE"</h2></div>
         <label class="side-search">
             <span class="ico" inner_html=icons::SEARCH></span>
-            <input placeholder="vehicle colour, health, teleport…" spellcheck="false"
+            <input placeholder="màu xe, máu, dịch chuyển…" spellcheck="false"
                 prop:value=move || query.get() on:input=move |ev| run(event_target_value(&ev))/>
         </label>
         <div class="natives">
@@ -389,13 +388,13 @@ pub(crate) fn NativesView(s: S) -> impl IntoView {
                     <div class="native" on:click=move |_| {
                         if detail.get_untracked().is_some() { detail.set(None); return; }
                         request("natives.doc", json!({"name": n2}), move |r| if let Ok(v) = r {
-                            detail.set(Some(v["notes"].as_str().unwrap_or("No notes.").to_string()));
+                            detail.set(Some(v["notes"].as_str().unwrap_or("Không có ghi chú.").to_string()));
                         });
                     }>
                         <div class="sig">{n["signature"].as_str().unwrap_or("").to_string()}</div>
                         <div class="native-foot">
                             <small>{n["native"].as_str().unwrap_or("").to_string()}</small>
-                            <button class="chip" on:click=move |ev| { ev.stop_propagation(); insert_code(s, &insert); }>"Insert"</button>
+                            <button class="chip" on:click=move |ev| { ev.stop_propagation(); insert_code(s, &insert); }>"Chèn"</button>
                         </div>
                         {move || detail.get().map(|d| view! { <p class="notes">{d}</p> })}
                     </div>

@@ -190,21 +190,48 @@ pub fn can_download_all() -> bool {
 /// Where the game's files go, for the start page when they are missing.
 pub fn where_the_game_goes() -> &'static str {
     if cfg!(target_os = "ios") {
-        "Copy the game folder into the app's files, named game: Finder (iPhone › Files › Glue 5) \
-         or the Files app (On My iPhone › Glue 5). This page looks again when the app comes back."
+        "Chép thư mục game (đặt tên là game) vào Tệp trên iPhone (Trên iPhone › Mugoat Glue › game) \
+         hoặc qua Finder trên máy Mac. Ứng dụng sẽ tự kiểm tra lại ngay khi bạn quay lại."
     } else if cfg!(target_os = "android") {
-        "Copy the game folder, named game, into Android/data/<app>/files/ on the device."
+        "Chép thư mục game (đặt tên là game) vào Android/data/<app>/files/ trên thiết bị."
     } else {
-        "Choose the game folder, or start glue5 with its path."
+        "Chọn thư mục chứa dữ liệu game, hoặc khởi chạy ứng dụng kèm đường dẫn tới thư mục đó."
     }
 }
 
 /// How the game streams instead, for the start page.
 pub fn or_stream() -> &'static str {
-    if MOBILE {
-        "Or play it from a device that has it, over the network."
-    } else {
-        "Or play it from another device that has it, over the network."
+    "Hoặc chơi trực tiếp qua mạng từ một thiết bị khác đang có sẵn bộ cài game."
+}
+
+/// Ensures the app's public Documents folder (and its `game/` directory) is
+/// initialized on iOS so the Files app ("Trên iPhone › Mugoat Glue") exposes
+/// the folder immediately for dropping game data in.
+pub fn prepare_documents() {
+    #[cfg(target_os = "ios")]
+    {
+        let docs = sdl3::filesystem::get_user_folder(sdl3::filesystem::Folder::DOCUMENTS)
+            .ok()
+            .or_else(|| std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join("Documents")));
+        let Some(docs) = docs else {
+            return;
+        };
+        let _ = std::fs::create_dir_all(&docs);
+        let game = docs.join("game");
+        let _ = std::fs::create_dir_all(&game);
+        keep_out_of_backups(&game);
+        let readme = docs.join("HuongDan_ChepGame.txt");
+        if !readme.exists() {
+            let text = concat!(
+                "HƯỚNG DẪN CHÉP DỮ LIỆU GAME CHO MUGOAT GLUE\r\n",
+                "==========================================\r\n\r\n",
+                "1. Hãy mở thư mục \"game\" nằm ngay bên cạnh tệp này.\r\n",
+                "2. Chép toàn bộ các tệp và thư mục dữ liệu GTA V vào bên trong thư mục \"game\"\r\n",
+                "   (trong \"game\" cần có thư mục data/ và các tệp .rpf / shaders).\r\n",
+                "3. Quay lại ứng dụng Mugoat Glue, hệ thống sẽ tự nhận diện dữ liệu.\r\n"
+            );
+            let _ = std::fs::write(&readme, text);
+        }
     }
 }
 

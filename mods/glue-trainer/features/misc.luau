@@ -11,13 +11,13 @@ local hudNames = require("../data/hud")
 local M = {}
 
 local function screen(menu: Menu)
-	menu:separator("HUD and map")
-	bind.feature(menu, "misc.noHud", "Hide the HUD", "And the radar: a clean screen", {
+	menu:separator("HUD và bản đồ")
+	bind.feature(menu, "misc.noHud", "Ẩn toàn bộ HUD", "Ẩn cả ra-đa để màn hình sạch sẽ", {
 		tick = function()
 			hud.hideHudAndRadarThisFrame()
 		end,
 	})
-	bind.feature(menu, "misc.noRadar", "Hide the radar", nil, {
+	bind.feature(menu, "misc.noRadar", "Ẩn ra-đa (Bản đồ nhỏ)", nil, {
 		on = function()
 			hud.displayRadar(false)
 		end,
@@ -25,7 +25,7 @@ local function screen(menu: Menu)
 			hud.displayRadar(true)
 		end,
 	})
-	bind.feature(menu, "misc.revealMap", "Reveal the map", "No fog on the pause menu's map", {
+	bind.feature(menu, "misc.revealMap", "Mở sáng toàn bản đồ", "Xóa sương mù che phủ trên bản đồ lớn", {
 		on = function()
 			hud.setMinimapHideFow(true)
 		end,
@@ -33,7 +33,7 @@ local function screen(menu: Menu)
 			hud.setMinimapHideFow(false)
 		end,
 	})
-	bind.feature(menu, "misc.bigMap", "Big radar", nil, {
+	bind.feature(menu, "misc.bigMap", "Phóng to bản đồ nhỏ", nil, {
 		on = function()
 			hud.setBigmapActive(true, false)
 		end,
@@ -44,8 +44,8 @@ local function screen(menu: Menu)
 end
 
 local function radio(menu: Menu)
-	menu:separator("Radio and music")
-	bind.feature(menu, "misc.mobileRadio", "Radio on foot", "The car's radio wherever you are", {
+	menu:separator("Đài phát thanh và âm nhạc")
+	bind.feature(menu, "misc.mobileRadio", "Nghe đài mọi lúc", "Bật đài xe hơi ngay cả khi đang đi bộ", {
 		tick = function()
 			audio.setMobileRadioEnabledDuringGameplay(true)
 			audio.setMobilePhoneRadioState(true)
@@ -56,7 +56,7 @@ local function radio(menu: Menu)
 		end,
 	})
 	-- The stations the game has unlocked, by their names in the game.
-	local stations = menu:choice("Station", { "Radio off" }, 1, "Tune the radio", bind.safe("Station", function(i: number)
+	local stations = menu:choice("Đài phát thanh", { "Tắt đài" }, 1, "Chọn kênh phát thanh", bind.safe("Đài phát thanh", function(i: number)
 		local name = if i == 1 then "OFF" else audio.getRadioStationName(i - 2)
 		local car = game.vehicle()
 		if car then
@@ -65,19 +65,19 @@ local function radio(menu: Menu)
 			audio.setRadioToStationName(name)
 		end
 	end))
-	menu:onOpen(bind.safe("Misc", function()
-		local names = { "Radio off" }
+	menu:onOpen(bind.safe("Tiện ích", function()
+		local names = { "Tắt đài" }
 		for i = 0, audio.getNumUnlockedRadioStations() - 1 do
 			local id = audio.getRadioStationName(i)
 			table.insert(names, game.label(id, id))
 		end
 		stations.options = names
 	end))
-	bind.command(menu, "misc.nextSong", "Next song", { action = "Skip" }, function(): string?
+	bind.command(menu, "misc.nextSong", "Chuyển bài kế tiếp", { action = "Chuyển" }, function(): string?
 		audio.skipRadioForward()
 		return nil
 	end)
-	bind.feature(menu, "misc.noScanner", "No police scanner", "Nor the wanted music", {
+	bind.feature(menu, "misc.noScanner", "Tắt bộ đàm cảnh sát", "Tắt cả tiếng nhạc khi bị truy nã", {
 		on = function()
 			audio.setAudioFlag("PoliceScannerDisabled", true)
 			audio.setAudioFlag("WantedMusicDisabled", true)
@@ -91,7 +91,7 @@ end
 
 -- The HUD's colours (hudcolor.dat's), each to any other; kept, and put back on the way out.
 local function colours(root: Menu)
-	local menu = root:submenu("HUD colours", { note = "The waypoint, the map's blips, the menus' accent...", search = true })
+	local menu = root:submenu("Màu sắc HUD", { note = "Màu điểm đánh dấu, biểu tượng bản đồ, thanh menu...", search = true })
 	-- The game's own colour of each changed one, to put back.
 	local original: { [number]: Rgba } = {}
 	local function set(index: number, c: Rgba)
@@ -105,7 +105,7 @@ local function colours(root: Menu)
 	for name, c in kept do
 		local i = table.find(hudNames, name)
 		if i then
-			bind.safe("HUD colours", set)(i - 1, c)
+			bind.safe("Màu HUD", set)(i - 1, c)
 		end
 	end
 	mod.onStop(function()
@@ -113,7 +113,7 @@ local function colours(root: Menu)
 			pcall(hud.replaceHudColourWithRgba, index, c.r, c.g, c.b, c.a or 255)
 		end
 	end)
-	bind.action(menu, "The game's own", { note = "Every colour back as it was", action = "Reset" }, function(): string?
+	bind.action(menu, "Khôi phục màu gốc", { note = "Trả lại toàn bộ màu về mặc định", action = "Đặt lại" }, function(): string?
 		for index, c in original do
 			hud.replaceHudColourWithRgba(index, c.r, c.g, c.b, c.a or 255)
 		end
@@ -122,7 +122,7 @@ local function colours(root: Menu)
 	end)
 	menu:separator()
 	local built = false
-	menu:onOpen(bind.safe("HUD colours", function()
+	menu:onOpen(bind.safe("Màu HUD", function()
 		if built then
 			return
 		end
@@ -142,9 +142,9 @@ end
 
 -- The game's TV channels, on the whole screen.
 local function tv(menu: Menu)
-	menu:separator("TV")
-	local channel = bind.choice(menu, "misc.tvChannel", "Channel", { "CNT", "Weazel" }, "CNT", "What Watch TV shows")
-	bind.feature(menu, "misc.tv", "Watch TV", "The game's TV over the whole screen", {
+	menu:separator("Truyền hình (TV)")
+	local channel = bind.choice(menu, "misc.tvChannel", "Kênh TV", { "CNT", "Weazel" }, "CNT", "Chọn kênh khi bật Xem TV")
+	bind.feature(menu, "misc.tv", "Xem TV", "Phát kênh truyền hình của game toàn màn hình", {
 		on = function()
 			graphics.setTvChannel(channel.value - 1)
 			graphics.setTvAudioFrontend(true)
@@ -164,7 +164,7 @@ end
 -- A camera above the player, looking down, as the first GTA games.
 local function topDown(menu: Menu)
 	local cam: Cam? = nil
-	bind.feature(menu, "misc.topDown", "Top-down camera", "Seen from above, as the first GTA games", {
+	bind.feature(menu, "misc.topDown", "Camera nhìn từ trên xuống", "Góc nhìn từ trên cao giống các bản GTA đầu tiên", {
 		on = function()
 			cam = camera.createCamWithParams("DEFAULT_SCRIPTED_CAMERA", game.position() + vector.create(0, 0, 30), vector.create(-89, 0, 0), 60, true, 2)
 			camera.renderScriptCams(true, false, 0, true, true, 0)
@@ -190,30 +190,30 @@ end
 -- Franklin, SP2 Trevor).
 local CHARACTERS = { [joaat("player_zero")] = "SP0", [joaat("player_one")] = "SP1", [joaat("player_two")] = "SP2" }
 local SKILLS = {
-	{ "Stamina", "STAMINA" },
-	{ "Shooting", "SHOOTING_ABILITY" },
-	{ "Strength", "STRENGTH" },
-	{ "Stealth", "STEALTH_ABILITY" },
-	{ "Flying", "FLYING_ABILITY" },
-	{ "Driving", "WHEELIE_ABILITY" },
-	{ "Lung capacity", "LUNG_CAPACITY" },
-	{ "Special ability", "SPECIAL_ABILITY_UNLOCKED" },
+	{ "Thể lực", "STAMINA" },
+	{ "Bắn súng", "SHOOTING_ABILITY" },
+	{ "Sức mạnh", "STRENGTH" },
+	{ "Ẩn nấp", "STEALTH_ABILITY" },
+	{ "Lái máy bay", "FLYING_ABILITY" },
+	{ "Lái xe", "WHEELIE_ABILITY" },
+	{ "Dung tích phổi", "LUNG_CAPACITY" },
+	{ "Kỹ năng đặc biệt", "SPECIAL_ABILITY_UNLOCKED" },
 }
 
 local function character(root: Menu)
-	local menu = root:submenu("Character", "Story mode: the character's money and skills")
-	menu:onOpen(bind.safe("Character", function()
+	local menu = root:submenu("Nhân vật cốt truyện", "Chế độ cốt truyện: tiền bạc và kỹ năng nhân vật")
+	menu:onOpen(bind.safe("Nhân vật cốt truyện", function()
 		menu:clear()
 		local who = CHARACTERS[entity.getEntityModel(game.me())]
 		if not who or game.online() then
-			menu:label("For Michael, Franklin and Trevor, in story mode.")
+			menu:label("Dành cho Michael, Franklin và Trevor trong chế độ cốt truyện.")
 			return
 		end
 		local _, cash = stats.statGetInt(joaat(`{who}_TOTAL_CASH`), 0, -1)
-		menu:number("Money", cash, { min = 0, max = 2000000000, step = 100000, note = "$" }, bind.safe("Money", function(v)
+		menu:number("Tiền mặt", cash, { min = 0, max = 2000000000, step = 100000, note = "$" }, bind.safe("Tiền mặt", function(v)
 			stats.statSetInt(joaat(`{who}_TOTAL_CASH`), v, true)
 		end))
-		menu:separator("Skills")
+		menu:separator("Kỹ năng")
 		for _, skill in SKILLS do
 			local stat = joaat(`{who}_{skill[2]}`)
 			local _, now = stats.statGetInt(stat, 0, -1)
@@ -225,20 +225,20 @@ local function character(root: Menu)
 end
 
 local function story(menu: Menu)
-	menu:separator("Story")
-	bind.command(menu, "misc.skipCutscene", "Skip the cutscene", { action = "Skip" }, function(): string?
+	menu:separator("Cốt truyện")
+	bind.command(menu, "misc.skipCutscene", "Bỏ qua đoạn cắt cảnh", { action = "Bỏ qua" }, function(): string?
 		if not cutscene.isCutsceneActive() then
-			return "No cutscene playing"
+			return "Không có đoạn cắt cảnh nào đang phát"
 		end
 		cutscene.stopCutsceneImmediately()
 		return nil
 	end)
-	bind.feature(menu, "misc.noPhone", "No phone", "It does not come out", {
+	bind.feature(menu, "misc.noPhone", "Tắt điện thoại", "Ngăn không cho điện thoại bật lên", {
 		tick = function()
 			pad.disableControlAction(0, Control.PHONE, true)
 		end,
 	})
-	bind.feature(menu, "misc.noMusic", "No flight or wanted music", "The score that starts in the air and with the police", {
+	bind.feature(menu, "misc.noMusic", "Tắt nhạc khi bay / bị truy nã", "Tắt nhạc nền khi bay hoặc lúc cảnh sát đuổi", {
 		on = function()
 			audio.setAudioFlag("DisableFlightMusic", true)
 			audio.setAudioFlag("WantedMusicDisabled", true)
@@ -248,7 +248,7 @@ local function story(menu: Menu)
 			audio.setAudioFlag("WantedMusicDisabled", false)
 		end,
 	})
-	bind.feature(menu, "misc.noStuntJumps", "No stunt jumps", "No slow motion over ramps", {
+	bind.feature(menu, "misc.noStuntJumps", "Tắt cảnh quay chậm nhảy dốc", "Không quay chậm qua các dốc Stunt Jump", {
 		on = function()
 			misc.setStuntJumpsCanTrigger(false)
 		end,
@@ -259,7 +259,7 @@ local function story(menu: Menu)
 end
 
 function M.build(root: Menu)
-	local menu = root:submenu("Misc", "HUD, its colours, map, radio, TV, cutscenes, overlay")
+	local menu = root:submenu("Tiện ích khác", "HUD, màu sắc, bản đồ, radio, TV, cắt cảnh, lớp phủ")
 	overlay.build(menu)
 	colours(menu)
 	screen(menu)

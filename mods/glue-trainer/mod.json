@@ -1,7 +1,7 @@
 {
   "name": "Glue Trainer",
-  "description": "A complete trainer: you, vehicles, weapons, teleports, the world, the camera, other players. F4 (or the Mods page's MENUS) opens it.",
-  "author": "GLUE 5",
+  "description": "Bộ công cụ hỗ trợ đầy đủ: nhân vật, phương tiện, vũ khí, dịch chuyển, thế giới, góc nhìn và người chơi khác. Nhấn F4 (hoặc vào Bản mod › MENU) để mở.",
+  "author": "MUGOAT GLUE",
   "version": "1.0",
   "autostart": true,
   "restartOnSave": true

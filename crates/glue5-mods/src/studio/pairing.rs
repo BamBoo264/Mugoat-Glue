@@ -273,7 +273,7 @@ pub fn device_name(user_agent: &str) -> String {
     } else if ua.contains("Safari/") {
         "Safari"
     } else {
-        "A browser"
+        "Trình duyệt"
     };
     let device = if ua.contains("iPhone") {
         "iPhone"
@@ -290,7 +290,7 @@ pub fn device_name(user_agent: &str) -> String {
     } else {
         ""
     };
-    if device.is_empty() { browser.to_string() } else { format!("{browser} on {device}") }
+    if device.is_empty() { browser.to_string() } else { format!("{browser} trên {device}") }
 }
 
 #[cfg(test)]
@@ -349,9 +349,9 @@ mod tests {
         let iphone = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
         let mac_chrome = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36";
         let android = "Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Mobile Safari/537.36";
-        assert_eq!(device_name(iphone), "Safari on iPhone");
-        assert_eq!(device_name(mac_chrome), "Chrome on Mac");
-        assert_eq!(device_name(android), "Chrome on Android");
-        assert_eq!(device_name("curl/8"), "A browser");
+        assert_eq!(device_name(iphone), "Safari trên iPhone");
+        assert_eq!(device_name(mac_chrome), "Chrome trên Mac");
+        assert_eq!(device_name(android), "Chrome trên Android");
+        assert_eq!(device_name("curl/8"), "Trình duyệt");
     }
 }

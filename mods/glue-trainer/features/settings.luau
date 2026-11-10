@@ -9,15 +9,15 @@ local prefs = require("../core/prefs")
 
 local M = {}
 
--- No key for an action.
-local NONE = "None"
+-- Không có phím tắt.
+local NONE = "Không"
 
 -- A feature and a key for it, and the keys given so far. Keys reach the trainer while no page of
 -- the app is open.
 local function bindings(menu: Menu)
-	local sub = menu:submenu("Keys", "A key for any feature or action")
+	local sub = menu:submenu("Phím tắt", "Gán phím tắt cho bất kỳ tính năng hay thao tác nào")
 	local filled = false
-	sub:onOpen(bind.safe("Keys", function()
+	sub:onOpen(bind.safe("Phím tắt", function()
 		if filled then
 			return
 		end
@@ -45,10 +45,10 @@ local function bindings(menu: Menu)
 					table.insert(lines, `{k}: {a.label}`)
 				end
 			end
-			given:set(if #lines > 0 then table.concat(lines, " · ") else "No keys yet.")
+			given:set(if #lines > 0 then table.concat(lines, " · ") else "Chưa gán phím tắt nào.")
 		end
-		local feature = sub:choice("Feature", labels, 1, "Pick one, with a search")
-		local key = sub:choice("Key", names, keyOf(1), "Its key; None for none", function(_, k)
+		local feature = sub:choice("Tính năng", labels, 1, "Chọn mục muốn gán phím")
+		local key = sub:choice("Phím", names, keyOf(1), "Phím kích hoạt; chọn Không để gỡ", function(_, k)
 			prefs.data.keys[actions[feature.value].name] = if k == NONE then "" else k
 			prefs.save()
 			list()
@@ -56,37 +56,37 @@ local function bindings(menu: Menu)
 		feature.onChange = function(i)
 			key.value = table.find(names, keyOf(i)) or 1
 		end
-		sub:separator("Keys given")
+		sub:separator("Phím đã gán")
 		given = sub:label("")
 		list()
 	end))
 end
 
 function M.build(root: Menu)
-	local menu = root:submenu("Settings", "Keys, notifications, units")
+	local menu = root:submenu("Cài đặt", "Phím tắt, thông báo, đơn vị đo")
 	bindings(menu)
-	menu:toggle("Notifications", prefs.data.notify, "Say what the trainer did", function(on)
+	menu:toggle("Thông báo", prefs.data.notify, "Hiển thị thông báo thao tác vừa thực hiện", function(on)
 		prefs.data.notify = on
 		prefs.save()
 	end)
-	menu:toggle("Keep what is on", prefs.data.remember, "Toggles and values come back at the next start", function(on)
+	menu:toggle("Ghi nhớ trạng thái", prefs.data.remember, "Tự khôi phục các nút bật và giá trị ở lần mở sau", function(on)
 		prefs.data.remember = on
 		prefs.save()
 	end)
-	menu:toggle("Fly to teleports", prefs.data.flyTeleports, "Far teleports go through the sky, as the game's character switch", function(on)
+	menu:toggle("Bay khi dịch chuyển xa", prefs.data.flyTeleports, "Dịch chuyển xa sẽ bay trên bầu trời giống chuyển nhân vật", function(on)
 		prefs.data.flyTeleports = on
 		prefs.save()
 	end)
-	menu:choice("Speed in", { "km/h", "mph" }, prefs.data.speedUnit, function(_, unit)
+	menu:choice("Đơn vị tốc độ", { "km/h", "mph" }, prefs.data.speedUnit, function(_, unit)
 		prefs.data.speedUnit = unit
 		prefs.save()
 	end)
-	menu:button("Back to the defaults", { note = "Keys, settings, favourites and what is kept; from the next start", action = "Reset" }, function()
+	menu:button("Khôi phục mặc định", { note = "Đặt lại phím tắt, tùy chọn, mục yêu thích từ lần chạy sau", action = "Đặt lại" }, function()
 		prefs.reset()
-		game.notify("Settings reset: restart the trainer for all of them")
+		game.notify("Đã đặt lại cài đặt: hãy khởi động lại trainer để áp dụng toàn bộ")
 	end)
 	local about = json.decode(mod.read("mod.json") or "{}")
-	menu:label(`Glue Trainer {about.version or ""} comes with GLUE 5. Its files are in the mods folder (glue-trainer): open them in the Studio to see how it is made, or to make it yours.`)
+	menu:label(`Glue Trainer {about.version or ""} đi kèm Mugoat Glue. Mã nguồn nằm trong thư mục mods/glue-trainer: mở bằng Studio để xem hoặc chỉnh sửa theo ý bạn.`)
 end
 
 return M

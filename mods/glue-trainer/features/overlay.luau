@@ -35,7 +35,7 @@ local function placeLines(): { string }
 end
 
 function M.build(root: Menu)
-	local menu = root:submenu("Overlay", "Frame rate, speed and position over the game")
+	local menu = root:submenu("Lớp phủ HUD", "Hiện tốc độ khung hình, vận tốc và vị trí lên màn hình")
 	local showFps, showSpeed, showPlace = false, false, false
 	-- Frames and their time since the lines were last read: the frame rate over that time.
 	local frames, elapsed = 0, 0
@@ -85,7 +85,7 @@ function M.build(root: Menu)
 			loop.remove("overlay")
 		end
 	end
-	bind.feature(menu, "overlay.fps", "Frame rate", "Frames per second", {
+	bind.feature(menu, "overlay.fps", "Tốc độ khung hình (FPS)", "Số khung hình trên giây", {
 		on = function()
 			showFps = true
 			update()
@@ -95,7 +95,7 @@ function M.build(root: Menu)
 			update()
 		end,
 	})
-	bind.feature(menu, "overlay.speed", "Speed", "Yours or your vehicle's", {
+	bind.feature(menu, "overlay.speed", "Tốc độ di chuyển", "Tốc độ của bạn hoặc xe đang lái", {
 		on = function()
 			showSpeed = true
 			update()
@@ -105,7 +105,7 @@ function M.build(root: Menu)
 			update()
 		end,
 	})
-	bind.feature(menu, "overlay.place", "Position", "Coordinates, heading, street and area", {
+	bind.feature(menu, "overlay.place", "Vị trí hiện tại", "Tọa độ, hướng nhìn, tên đường và khu vực", {
 		on = function()
 			showPlace = true
 			update()
@@ -115,7 +115,7 @@ function M.build(root: Menu)
 			update()
 		end,
 	})
-	menu:color("Text colour", color, { alpha = true }, function(c)
+	menu:color("Màu chữ", color, { alpha = true }, function(c)
 		color = string.format("#%02x%02x%02x%02x", c.r, c.g, c.b, c.a or 255)
 		prefs.set("overlay.color", color)
 	end)

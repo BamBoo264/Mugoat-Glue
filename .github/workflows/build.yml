@@ -21,7 +21,6 @@ concurrency:
 
 jobs:
   build:
-    if: github.event.repository.private
     name: ${{ inputs.platform }}
     # Apple: macos-15, whose machines are many more than macos-26's (a job
     # there could be cancelled after waiting for one), with Xcode 26 (below).

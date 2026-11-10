@@ -24,7 +24,7 @@ pub(crate) fn request(method: &str, params: Value, then: impl FnOnce(Result<Valu
     if sent {
         PENDING.with(|p| p.borrow_mut().insert(id, Box::new(then)));
     } else {
-        then(Err("not connected to the game".into()));
+        then(Err("chưa kết nối với trò chơi".into()));
     }
 }
 
@@ -116,7 +116,7 @@ pub(crate) fn connect(s: S) {
         SOCKET.with(|sock| sock.borrow_mut().take());
         PENDING.with(|p| {
             for (_, then) in p.borrow_mut().drain() {
-                then(Err("the connection to the game closed".into()));
+                then(Err("kết nối tới trò chơi đã đóng".into()));
             }
         });
         if opened.get() {
@@ -193,7 +193,7 @@ pub(crate) fn reload(s: S, path: &str) {
     }
     if tab.dirty {
         // Saving would overwrite what changed: say so.
-        s.notice.set(Some(format!("{path} changed in the game's folder; saving keeps your version")));
+        s.notice.set(Some(format!("{path} đã thay đổi trong thư mục game; lưu sẽ giữ bản của bạn")));
         return;
     }
     let p = path.to_string();

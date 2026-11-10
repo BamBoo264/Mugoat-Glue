@@ -134,7 +134,7 @@ fn update(dir: &Path, name: &str, files: &[(&str, &[u8])], before: Option<&Json>
     if edited {
         let mut entry = before.cloned().unwrap_or_else(|| json!({}));
         let notice = (entry["kept"].as_str() != Some(version.as_str()) && before.and_then(|b| b["version"].as_str()) != Some(version.as_str()))
-            .then(|| format!("{title} {version} is out; your edited copy stays as it is (delete the folder {name} for the new one)"));
+            .then(|| format!("Đã có {title} {version}; bản bạn tự chỉnh sửa vẫn được giữ nguyên (hãy xóa thư mục {name} nếu muốn dùng bản mới)"));
         entry["kept"] = json!(version);
         return Ok((entry, notice));
     }
@@ -152,7 +152,7 @@ fn update(dir: &Path, name: &str, files: &[(&str, &[u8])], before: Option<&Json>
         let _ = std::fs::remove_file(folder.join(f));
     }
     let was = before.and_then(|b| b["version"].as_str()).unwrap_or_default();
-    let notice = (!fresh && was != version).then(|| format!("{title} updated to {version}"));
+    let notice = (!fresh && was != version).then(|| format!("Đã cập nhật {title} lên {version}"));
     if fresh {
         log::info!("mods: {name} {version} installed in {}", dir.display());
     }
@@ -197,7 +197,7 @@ mod tests {
         std::fs::write(dir.join("t/mod.json"), r#"{ "name": "T", "version": "1.0", "autostart": false }"#).unwrap();
         std::fs::write(dir.join("t/settings.json"), "{}").unwrap();
         let (entry, notice) = update(&dir, "t", V2, Some(&entry)).unwrap();
-        assert_eq!(notice.as_deref(), Some("T updated to 2.0"));
+        assert_eq!(notice.as_deref(), Some("Đã cập nhật T lên 2.0"));
         assert_eq!(std::fs::read(dir.join("t/lib/b.luau")).unwrap(), b"return 2");
         assert!(!dir.join("t/old.luau").exists(), "a file the new version dropped goes");
         assert!(dir.join("t/settings.json").exists());
@@ -214,7 +214,7 @@ mod tests {
         let (entry, _) = update(&dir, "t", V1, None).unwrap();
         std::fs::write(dir.join("t/lib/a.luau"), "return 'mine'").unwrap();
         let (entry, notice) = update(&dir, "t", V2, Some(&entry)).unwrap();
-        assert!(notice.unwrap().contains("2.0 is out"));
+        assert!(notice.unwrap().contains("2.0"));
         assert_eq!(std::fs::read(dir.join("t/lib/a.luau")).unwrap(), b"return 'mine'");
         assert!(!dir.join("t/lib/b.luau").exists());
         // Said once per version.

@@ -4,7 +4,7 @@
 //! mods' menus, for a phone) with their addresses, the pairing code, a QR
 //! code and the paired browsers and agents; the mods' log.
 
-use egui::{Color32, CornerRadius, RichText, Sense, vec2};
+use egui::{Color32, CornerRadius, RichText, Sense, Stroke, vec2};
 use glue5_mods::ModState;
 
 use super::menus::{MenusView, Out};
@@ -205,9 +205,9 @@ pub(super) fn mods_page(ctx: &egui::Context, page: &mut ModsPage, settings: &mut
                 card_title(ui, "VỀ BẢN MOD", None);
                 small(
                     ui,
-                    "A mod is a folder of Luau scripts that call the game's own functions: spawn a car, change \
-                     the weather, add a menu of its own. Turn mods on, then write them in GLUE 5 Studio from a \
-                     browser on your computer or tablet, or let Claude Code write them.",
+                    "Mod là thư mục chứa các tệp mã nguồn Luau gọi trực tiếp các hàm của trò chơi: tạo xe, thay đổi \
+                     thời tiết, thêm menu tùy chỉnh. Hãy bật Bản mod rồi biên tập bằng Mugoat Glue Studio trên trình \
+                     duyệt máy tính/máy tính bảng.",
                     theme::MUTED,
                 );
             });
@@ -362,13 +362,12 @@ fn studio_tab(ui: &mut egui::Ui, settings: &mut Settings, status: &Status) {
     }
     muted(
         ui,
-        "Whoever has the code can pair, and a paired Studio runs code in the game: make a new code if someone should no \
-         longer have it, and remove what should no longer be paired. A pairing unused for 90 days goes by itself.",
+        "Bất kỳ ai có mã đều có thể ghép nối và chạy mã trong trò chơi qua Studio: hãy tạo mã mới nếu muốn ngắt \
+         người khác và gỡ các kết nối không còn dùng. Kết nối không hoạt động quá 90 ngày sẽ tự xóa.",
     );
 }
 
-/// The browsers and agents paired with the Studio, each removable: its
-/// token no longer works, its pages close.
+/// Các trình duyệt và tác nhân AI đã ghép nối với Studio.
 fn paired(ui: &mut egui::Ui) {
     let pairings = glue5_mods::studio::pairing::list();
     if pairings.is_empty() {
@@ -376,7 +375,7 @@ fn paired(ui: &mut egui::Ui) {
     }
     let scale = theme::density(ui);
     ui.add_space(6.0 * scale);
-    ui.label(theme::heading("ĐÃ GHÉP NỐI", 15.0 * scale).color(theme::MUTED));
+    ui.label(theme::heading("ĐÃ GHÉP NỐI", 15.0 * scale).color(theme::ACCENT));
     let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
     for p in &pairings {
         let what = match p.scope {
@@ -399,26 +398,26 @@ fn paired(ui: &mut egui::Ui) {
     }
 }
 
-/// `seconds` ago, as people say it.
+/// Thời gian tương đối bằng tiếng Việt.
 fn ago(seconds: u64) -> String {
     match seconds {
         0..60 => "vừa xong".into(),
         60..3600 => format!("{} phút trước", seconds / 60),
         3600..86400 => format!("{} giờ trước", seconds / 3600),
         _ => match seconds / 86400 {
-            1 => "yesterday".into(),
+            1 => "hôm qua".into(),
             d => format!("{d} ngày trước"),
         },
     }
 }
 
-/// The control page's address (with the code) as a QR code, in a row like
-/// the settings': a phone's camera opens it, paired for the control page.
+/// Mã QR mở trang điều khiển mod trên điện thoại.
 fn qr_row(ui: &mut egui::Ui, url: &str) {
     let scale = theme::density(ui);
     egui::Frame::new()
-        .fill(Color32::from_gray(28))
-        .corner_radius((14.0 * scale) as u8)
+        .fill(theme::CARD)
+        .stroke(Stroke::new(1.0, theme::BORDER))
+        .corner_radius((16.0 * scale) as u8)
         .inner_margin((12.0 * scale) as i8)
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
@@ -483,8 +482,9 @@ fn qr(ui: &mut egui::Ui, text: &str, size: f32) {
 fn panel(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui)) {
     let scale = theme::density(ui);
     egui::Frame::new()
-        .fill(Color32::from_gray(28))
-        .corner_radius((14.0 * scale) as u8)
+        .fill(theme::CARD)
+        .stroke(Stroke::new(1.0, theme::BORDER))
+        .corner_radius((16.0 * scale) as u8)
         .inner_margin((14.0 * scale) as i8)
         .show(ui, |ui| {
             ui.set_width(ui.available_width());

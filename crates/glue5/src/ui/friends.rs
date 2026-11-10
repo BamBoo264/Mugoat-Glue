@@ -54,9 +54,9 @@ pub fn toast(notice: &Notice) -> Toast {
 pub(super) fn draw_toast(ui: &mut egui::Ui, t: &Toast, width: f32) {
     let scale = theme::density(ui);
     egui::Frame::new()
-        .fill(Color32::from_rgba_unmultiplied(18, 18, 20, 240))
-        .stroke(Stroke::new(1.0, Color32::from_gray(60)))
-        .corner_radius((14.0 * scale) as u8)
+        .fill(Color32::from_rgba_unmultiplied(theme::SURFACE.r(), theme::SURFACE.g(), theme::SURFACE.b(), 242))
+        .stroke(Stroke::new(1.0, theme::ACCENT_SOFT))
+        .corner_radius((16.0 * scale) as u8)
         .inner_margin(egui::Margin::symmetric((14.0 * scale) as i8, (10.0 * scale) as i8))
         .show(ui, |ui| {
             ui.set_width(width - 28.0 * scale);
@@ -64,9 +64,9 @@ pub(super) fn draw_toast(ui: &mut egui::Ui, t: &Toast, width: f32) {
                 avatar(ui, &t.name, 34.0 * scale);
                 ui.vertical(|ui| {
                     ui.spacing_mut().item_spacing.y = 1.0 * scale;
-                    ui.label(theme::heading(t.title, 15.0 * scale).color(Color32::WHITE));
+                    ui.label(theme::heading(t.title, 15.0 * scale).color(theme::ACCENT));
                     if !t.name.is_empty() {
-                        ui.label(RichText::new(&t.name).size(13.0 * scale).strong().color(Color32::WHITE));
+                        ui.label(RichText::new(&t.name).size(13.0 * scale).strong().color(theme::TEXT));
                     }
                     ui.label(RichText::new(&t.text).size(12.0 * scale).color(theme::MUTED));
                 });
@@ -161,9 +161,9 @@ fn friends_tab(ui: &mut egui::Ui, snapshot: &Snapshot, page: &mut FriendsPage, g
     ui.add_space(4.0);
     muted(
         ui,
-        "Friends find each other directly, with no server: they see when you play, invite you and join you. \
-         What you say to each other is encrypted; like any player you meet online, a friend sees your Internet \
-         address.",
+        "Bạn bè kết nối trực tiếp với nhau không qua máy chủ trung gian: họ có thể thấy khi bạn đang chơi, \
+         gửi lời mời và tham gia cùng bạn. Tin nhắn đều được mã hóa; như mọi người chơi trực tuyến khác, \
+         bạn bè sẽ thấy địa chỉ Internet của bạn.",
     );
 }
 

@@ -3,7 +3,7 @@
 use super::pages::sheet;
 use super::theme;
 use super::widgets::{Control, action_button, setting};
-use egui::{Color32, RichText};
+use egui::{RichText, Stroke};
 
 /// A project: its name, what it does here, its license, its website.
 const PROJECTS: &[(&str, &str, &str, &str)] = &[
@@ -52,31 +52,36 @@ pub(super) fn credits_page(ctx: &egui::Context) -> bool {
             ui.label(RichText::new(text).size(12.5 * scale).color(theme::MUTED));
         };
         egui::Frame::new()
-            .fill(Color32::from_gray(28))
-            .corner_radius((14.0 * scale) as u8)
+            .fill(theme::CARD)
+            .stroke(Stroke::new(1.0, theme::ACCENT_SOFT))
+            .corner_radius((16.0 * scale) as u8)
             .inner_margin((16.0 * scale) as i8)
             .show(ui, |ui| {
                 ui.set_width(ui.available_width());
                 ui.spacing_mut().item_spacing.y = 6.0 * scale;
                 ui.horizontal(|ui| {
-                    ui.label(theme::heading("MUGOAT GLUE", 26.0 * scale));
-                    ui.label(RichText::new(env!("CARGO_PKG_VERSION")).size(12.0 * scale).color(theme::MUTED));
+                    ui.label(theme::heading("MUGOAT GLUE", 26.0 * scale).color(theme::ACCENT));
+                    ui.label(
+                        RichText::new(format!("v{} · Việt hoá 100%", env!("CARGO_PKG_VERSION")))
+                            .size(12.0 * scale)
+                            .color(theme::CYAN),
+                    );
                 });
                 text(
                     ui,
-                    "GTA V's WebAssembly build as a native application for phones, tablets and computers: \
-                     the game's code recompiled for this device, with its graphics, sound, controls and \
-                     online play. Free software, under the GNU General Public License, version 3 or later.",
+                    "Phiên bản WebAssembly của GTA V chạy như một ứng dụng gốc cho điện thoại, máy tính bảng \
+                     và máy tính: mã nguồn trò chơi được biên dịch lại cho thiết bị này với đầy đủ đồ hoạ, âm thanh, \
+                     điều khiển và chế độ chơi trực tuyến. Phần mềm tự do theo giấy phép GNU GPL v3 trở lên.",
                 );
             });
         text(
             ui,
-            "Grand Theft Auto V is © Rockstar Games and Take-Two Interactive. Glue 5 is an independent \
-             project, neither affiliated with nor endorsed by them, and includes none of the game's files: \
-             it runs your own copy.",
+            "Grand Theft Auto V thuộc bản quyền của Rockstar Games và Take-Two Interactive. Mugoat Glue là \
+             dự án độc lập, không liên kết hay được xác nhận bởi họ, và không đính kèm bất kỳ tệp dữ liệu \
+             trò chơi nào — ứng dụng chỉ chạy trên bản sao hợp lệ do chính bạn tự cung cấp.",
         );
         ui.add_space(4.0 * scale);
-        ui.label(theme::heading("MÃ NGUỒN MỞ", 17.0 * scale).color(theme::MUTED));
+        ui.label(theme::heading("THÀNH PHẦN MÃ NGUỒN MỞ", 17.0 * scale).color(theme::ACCENT));
         for &(name, what, license, url) in PROJECTS {
             setting(ui, name, Control::Action, Some(&format!("{what} · {license}")), |ui| {
                 if action_button(ui, "Trang web").on_hover_text(url).clicked() {
@@ -86,9 +91,8 @@ pub(super) fn credits_page(ctx: &egui::Context) -> bool {
         }
         text(
             ui,
-            "With the libraries these use, each under its own license (MIT, Apache-2.0, BSD, Zlib, \
-             Unicode, …). GTA Online's players and friends find each other through the BitTorrent DHT, \
-             kept by the people who run it.",
+            "Cùng các thư viện phụ trợ dưới giấy phép riêng (MIT, Apache-2.0, BSD, Zlib, Unicode, …). \
+             Người chơi và bạn bè trong GTA Online tìm thấy nhau qua mạng phi tập trung BitTorrent DHT.",
         );
     })
 }

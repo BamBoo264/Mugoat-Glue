@@ -36,9 +36,9 @@ struct Client {
 const CLIENTS: &[Client] = &[
     Client {
         name: "Claude Code",
-        note: "Run once in a terminal: every project sees the game from then on.",
+        note: "Chạy lệnh sau một lần trong terminal: mọi dự án từ đó sẽ kết nối thẳng vào game.",
         steps: &[Step {
-            say: "Add the server",
+            say: "Thêm máy chủ MCP",
             lang: Lang::Bash,
             text: "claude mcp add --transport http --scope user glue5 {url} \\\n  --header \"Authorization: Bearer {token}\"",
         }],
@@ -46,9 +46,9 @@ const CLIENTS: &[Client] = &[
     },
     Client {
         name: "Codex",
-        note: "The Codex CLI, app and IDE extension share this file (its add command takes no header).",
+        note: "Codex CLI, ứng dụng và tiện ích IDE dùng chung tệp cấu hình này.",
         steps: &[Step {
-            say: "Add to ~/.codex/config.toml",
+            say: "Thêm vào ~/.codex/config.toml",
             lang: Lang::Toml,
             text: "[mcp_servers.glue5]\nurl = \"{url}\"\nhttp_headers = { \"Authorization\" = \"Bearer {token}\" }",
         }],
@@ -56,29 +56,29 @@ const CLIENTS: &[Client] = &[
     },
     Client {
         name: "Cursor",
-        note: "One click adds it; or add it to ~/.cursor/mcp.json yourself.",
+        note: "Nhấn một chạm để cài đặt hoặc tự thêm vào ~/.cursor/mcp.json.",
         steps: &[Step {
             say: "~/.cursor/mcp.json",
             lang: Lang::Json,
             text: "{\n  \"mcpServers\": {\n    \"glue5\": {\n      \"url\": \"{url}\",\n      \"headers\": { \"Authorization\": \"Bearer {token}\" }\n    }\n  }\n}",
         }],
-        install: Some(("Add to Cursor", cursor_link)),
+        install: Some(("Thêm vào Cursor", cursor_link)),
     },
     Client {
         name: "VS Code",
-        note: "For Copilot's agent mode. One click adds it to your profile; or run the command.",
+        note: "Dùng cho chế độ tác nhân (Copilot agent). Nhấn một chạm hoặc chạy lệnh terminal.",
         steps: &[Step {
-            say: "Or in a terminal",
+            say: "Hoặc trong terminal",
             lang: Lang::Bash,
             text: "code --add-mcp '{\"name\":\"glue5\",\"type\":\"http\",\"url\":\"{url}\",\"headers\":{\"Authorization\":\"Bearer {token}\"}}'",
         }],
-        install: Some(("Add to VS Code", vscode_link)),
+        install: Some(("Thêm vào VS Code", vscode_link)),
     },
     Client {
         name: "Copilot CLI",
-        note: "Run once in a terminal (GitHub Copilot's CLI).",
+        note: "Chạy một lần trong terminal (GitHub Copilot CLI).",
         steps: &[Step {
-            say: "Add the server",
+            say: "Thêm máy chủ MCP",
             lang: Lang::Bash,
             text: "copilot mcp add --transport http glue5 {url} \\\n  --header \"Authorization: Bearer {token}\"",
         }],
@@ -86,7 +86,7 @@ const CLIENTS: &[Client] = &[
     },
     Client {
         name: "Antigravity",
-        note: "Google Antigravity (it took over from Gemini CLI), the IDE and the CLI alike.",
+        note: "Google Antigravity IDE và CLI đều dùng chung cấu hình này.",
         steps: &[Step {
             say: "~/.gemini/config/mcp_config.json",
             lang: Lang::Json,
@@ -96,7 +96,7 @@ const CLIENTS: &[Client] = &[
     },
     Client {
         name: "Claude Desktop",
-        note: "The app's connectors reach servers from the cloud, not this computer: it uses the mcp-remote bridge instead, which needs Node.js. Restart the app after saving.",
+        note: "Ứng dụng kết nối từ đám mây nên dùng cầu nối mcp-remote (cần Node.js). Khởi động lại ứng dụng sau khi lưu.",
         steps: &[Step {
             say: "Settings › Developer › Edit Config (claude_desktop_config.json)",
             lang: Lang::Json,
@@ -106,7 +106,7 @@ const CLIENTS: &[Client] = &[
     },
     Client {
         name: "Windsurf",
-        note: "Windsurf, now Devin Desktop: Cascade › MCP servers › View raw config, then refresh. Older versions keep it in ~/.codeium/windsurf/mcp_config.json.",
+        note: "Windsurf (Devin Desktop): vào Cascade › MCP servers › View raw config rồi làm mới.",
         steps: &[Step {
             say: "~/.config/devin/mcp_config.json",
             lang: Lang::Json,
@@ -116,7 +116,7 @@ const CLIENTS: &[Client] = &[
     },
     Client {
         name: "Zed",
-        note: "In Zed's settings.json (zed: open settings file), or Settings › AI › MCP Servers › Add Remote Server.",
+        note: "Thêm vào settings.json của Zed hoặc Settings › AI › MCP Servers › Add Remote Server.",
         steps: &[Step {
             say: "settings.json",
             lang: Lang::Json,
@@ -126,7 +126,7 @@ const CLIENTS: &[Client] = &[
     },
     Client {
         name: "opencode",
-        note: "In ~/.config/opencode/opencode.json, or the project's opencode.json.",
+        note: "Thêm vào ~/.config/opencode/opencode.json hoặc opencode.json của dự án.",
         steps: &[Step {
             say: "opencode.json",
             lang: Lang::Json,
@@ -135,11 +135,11 @@ const CLIENTS: &[Client] = &[
         install: None,
     },
     Client {
-        name: "Other",
-        note: "Any MCP client that speaks Streamable HTTP (JetBrains, Cline, Goose, Kiro…): the address, and the header to send.",
+        name: "Khác",
+        note: "Mọi MCP client hỗ trợ Streamable HTTP (JetBrains, Cline, Goose, Kiro…): điền địa chỉ và header sau.",
         steps: &[
-            Step { say: "Server address", lang: Lang::Bash, text: "{url}" },
-            Step { say: "Header", lang: Lang::Bash, text: "Authorization: Bearer {token}" },
+            Step { say: "Địa chỉ máy chủ", lang: Lang::Bash, text: "{url}" },
+            Step { say: "Header xác thực", lang: Lang::Bash, text: "Authorization: Bearer {token}" },
         ],
         install: None,
     },
@@ -210,8 +210,8 @@ fn Snippet(lang: Lang, text: String, ready: bool) -> impl IntoView {
         <div class="snippet" data-lang=lang.name()>
             <pre><code>{code}</code></pre>
             <button class="btn small ghost copy" disabled=!ready on:click=copy
-                title=if ready { "Copy" } else { "Make the token first" }>
-                {move || if copied.get() { "Copied" } else { "Copy" }}
+                title=if ready { "Sao chép" } else { "Hãy tạo mã trước" }>
+                {move || if copied.get() { "Đã chép" } else { "Sao chép" }}
             </button>
         </div>
     }
@@ -262,35 +262,35 @@ pub(crate) fn Agents() -> impl IntoView {
             <p class="agent-note">{client.note}</p>
             <ol class="agent-steps">
                 <li>
-                    <span class="say">"A token of its own"</span>
+                    <span class="say">"Mã xác thực riêng"</span>
                     {match token {
                         Some(_) => view! {
-                            <p class="made">"Done: “"{name}"” has a pairing of its own. The game lists it under Mods › Studio; removing it there cuts it off."</p>
+                            <p class="made">"Hoàn tất: “"{name}"” đã có mã ghép nối riêng. Quản lý tại mục Bản mod › Studio trong game."</p>
                         }.into_any(),
                         None => view! {
                             <div class="make">
-                                <button class="btn primary" on:click=move |_| make(name)>{format!("Make {name}'s token")}</button>
+                                <button class="btn primary" on:click=move |_| make(name)>{format!("Tạo mã cho {name}")}</button>
                                 {move || failed.get().map(|e| view! { <small class="err">{e}</small> })}
                             </div>
                         }.into_any(),
                     }}
                 </li>
                 {steps}
-                {install.map(|a| view! { <li><span class="say">"Or in one click"</span>{a}</li> })}
+                {install.map(|a| view! { <li><span class="say">"Hoặc cài bằng một chạm"</span>{a}</li> })}
             </ol>
         }
     };
     view! {
         <section class="agents" aria-labelledby="agents-h">
-            <h2 id="agents-h">"Build with an AI agent"</h2>
-            <p class="lead">"Agents work on the game through MCP: they read every native's type, write and check mods, run them, read their logs and use their menus."</p>
+            <h2 id="agents-h">"Lập trình cùng tác nhân AI"</h2>
+            <p class="lead">"Tác nhân AI kết nối trực tiếp vào game qua MCP: đọc kiểu mọi hàm native, viết và kiểm tra bản mod, chạy thử, đọc nhật ký và điều khiển menu."</p>
             <div class="agent-tabs" role="tablist">
                 {CLIENTS.iter().enumerate().map(|(i, c)| view! {
                     <button role="tab" class=move || if chosen.get() == i { "on" } else { "" }
                         aria-selected=move || (chosen.get() == i).to_string()
                         on:click=move |_| chosen.set(i)>
                         {c.name}
-                        <Show when=move || tokens.with(|t| t.contains_key(c.name))><span class="paired" title="Paired"></span></Show>
+                        <Show when=move || tokens.with(|t| t.contains_key(c.name))><span class="paired" title="Đã ghép nối"></span></Show>
                     </button>
                 }).collect_view()}
             </div>

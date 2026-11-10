@@ -26,13 +26,13 @@ local last: Vehicle? = nil
 -- sees it, and the player in it.
 function M.spawnAt(hash: number, pos: vector, heading: number?): (Vehicle?, string?)
 	if not streaming.load(hash) then
-		return nil, "That vehicle did not load"
+		return nil, "Không tải được mẫu xe này"
 	end
 	local online = network.networkIsSessionStarted()
 	local car = vehicle.createVehicle(hash, pos, heading or 0, online, false, false)
 	streaming.setModelAsNoLongerNeeded(hash)
 	if not car then
-		return nil, if online then "The game made none (in a job, only its own vehicles)" else "The game made none"
+		return nil, if online then "Game không tạo được xe (trong nhiệm vụ chỉ gọi được xe của nhiệm vụ)" else "Game không tạo được xe"
 	end
 	if online then
 		network.setNetworkIdExistsOnAllMachines(network.vehToNet(car), true)
@@ -94,16 +94,16 @@ function M.spawn(hash: number, name: string): (Vehicle?, string?)
 end
 
 local function garage(root: Menu)
-	local menu = root:submenu("Your garage", "Vehicles saved with their parts and colours")
+	local menu = root:submenu("Ga-ra của bạn", "Các xe đã lưu nguyên phụ tùng và màu sơn")
 	local function saved(): { Saved }
 		return storage.get("garage") or {}
 	end
 	local function build()
 		menu:clear()
-		bind.action(menu, "Save the vehicle you are in", { note = "Parts, colours, plate", action = "Save" }, function(): string?
+		bind.action(menu, "Lưu chiếc xe đang lái", { note = "Phụ tùng, màu sơn, biển số", action = "Lưu" }, function(): string?
 			local car = game.vehicle()
 			if not car then
-				return "You are not in a vehicle"
+				return "Bạn không ngồi trong xe nào"
 			end
 			local look = customs.look(car)
 			local name = game.label(vehicle.getDisplayNameFromVehicleModel(look.model))
@@ -111,16 +111,16 @@ local function garage(root: Menu)
 			table.insert(list, { name = if look.plate ~= "" then `{name} ({look.plate})` else name, look = look })
 			storage.set("garage", list)
 			build()
-			return `Saved: {name}`
+			return `Đã lưu: {name}`
 		end)
 		local list = saved()
 		if #list == 0 then
-			menu:label("Nothing saved yet.")
+			menu:label("Chưa có xe nào được lưu.")
 			return
 		end
-		menu:separator("Deliver")
+		menu:separator("Giao xe")
 		for _, s in list do
-			bind.action(menu, s.name, { action = "Deliver" }, function(): string?
+			bind.action(menu, s.name, { action = "Triệu hồi" }, function(): string?
 				local car, why = M.spawn(s.look.model, s.name)
 				if car then
 					customs.apply(car, s.look)
@@ -128,14 +128,14 @@ local function garage(root: Menu)
 				return why
 			end)
 		end
-		local forget = menu:submenu("Delete a vehicle")
+		local forget = menu:submenu("Xóa xe đã lưu")
 		for i, s in list do
-			bind.action(forget, s.name, { action = "Delete" }, function(): string?
+			bind.action(forget, s.name, { action = "Xóa" }, function(): string?
 				local l = saved()
 				table.remove(l, i)
 				storage.set("garage", l)
 				build()
-				return `Deleted: {s.name}`
+				return `Đã xóa: {s.name}`
 			end)
 		end
 	end
@@ -153,7 +153,7 @@ function M.picker(menu: Menu, verb: string, pick: (entry: catalog.VehicleEntry) 
 		end
 		return #entries > 0
 	end
-	lists.lazy(menu, "Search all", "Every vehicle, by name", function(target)
+	lists.lazy(menu, "Tìm trong tất cả", "Toàn bộ xe theo tên", function(target)
 		return fill(target, catalog.vehicles())
 	end)
 	local listed = false
@@ -163,7 +163,7 @@ function M.picker(menu: Menu, verb: string, pick: (entry: catalog.VehicleEntry) 
 		end
 		local classes = catalog.vehicleClasses()
 		for _, class in classes do
-			lists.lazy(menu, class.name, `{#class.vehicles} vehicles`, function(target)
+			lists.lazy(menu, class.name, `{#class.vehicles} xe`, function(target)
 				return fill(target, class.vehicles)
 			end)
 		end
@@ -172,20 +172,20 @@ function M.picker(menu: Menu, verb: string, pick: (entry: catalog.VehicleEntry) 
 end
 
 function M.build(root: Menu)
-	local menu = root:submenu("Spawn a vehicle", "Every vehicle of the game, by class or by name; your garage")
-	local optionsMenu = menu:submenu("Options", "How vehicles are delivered")
+	local menu = root:submenu("Gọi xe", "Mọi phương tiện trong game theo phân loại hoặc tên; ga-ra của bạn")
+	local optionsMenu = menu:submenu("Tùy chọn gọi xe", "Cách phương tiện được đưa tới")
 	options = {
-		warpIn = (bind.feature(optionsMenu, "spawn.warpIn", "Get in", "In the driver's seat; aircraft in the air", {})),
-		replace = (bind.feature(optionsMenu, "spawn.replace", "Replace the last one", "The vehicle spawned before goes", {})),
-		maxed = (bind.feature(optionsMenu, "spawn.maxed", "Fully upgraded", "Every upgrade the vehicle has", {})),
-		god = (bind.feature(optionsMenu, "spawn.god", "Indestructible", "No damage, no wear", {})),
-		plate = optionsMenu:text("Plate", "", { placeholder = "As the game gives it", max = 8 }),
+		warpIn = (bind.feature(optionsMenu, "spawn.warpIn", "Ngồi sẵn vào xe", "Ngồi ngay vào ghế lái; máy bay ở trên không", {})),
+		replace = (bind.feature(optionsMenu, "spawn.replace", "Thay thế xe vừa gọi", "Xe gọi lần trước sẽ tự biến mất", {})),
+		maxed = (bind.feature(optionsMenu, "spawn.maxed", "Nâng cấp tối đa", "Tự độ đầy đủ mọi nâng cấp", {})),
+		god = (bind.feature(optionsMenu, "spawn.god", "Xe bất tử", "Không hư hỏng, không trầy xước", {})),
+		plate = optionsMenu:text("Biển số xe", "", { placeholder = "Theo mặc định của game", max = 8 }),
 	}
 	garage(menu)
-	menu:separator("Vehicles")
-	M.picker(menu, "Spawn", function(entry: catalog.VehicleEntry): string?
+	menu:separator("Danh sách phương tiện")
+	M.picker(menu, "Gọi", function(entry: catalog.VehicleEntry): string?
 		local car, why = M.spawn(entry.hash, entry.name)
-		return if car then `{entry.name} delivered` else why
+		return if car then `Đã gọi {entry.name}` else why
 	end)
 end
 

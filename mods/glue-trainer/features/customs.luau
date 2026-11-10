@@ -34,7 +34,7 @@ export type Look = {
 }
 
 local function slotName(car: Vehicle, slot: number): string
-	return game.label(vehicle.getModSlotName(car, slot), data.modSlots[slot] or `Slot {slot}`)
+	return game.label(vehicle.getModSlotName(car, slot), data.modSlots[slot] or `Mục {slot}`)
 end
 
 -- Every upgrade the vehicle has, at its best.
@@ -164,19 +164,19 @@ local function indexed(menu: Menu, label: string, count: number, current: number
 end
 
 local function colours(menu: Menu, car: Vehicle)
-	menu:separator("Colours")
-	menu:color("Primary", rgb(vehicle.getVehicleCustomPrimaryColour(car)), bind.safe("Primary", function(c)
+	menu:separator("Màu sơn")
+	menu:color("Màu chính", rgb(vehicle.getVehicleCustomPrimaryColour(car)), bind.safe("Màu chính", function(c)
 		vehicle.setVehicleCustomPrimaryColour(car, c.r, c.g, c.b)
 	end))
-	menu:color("Secondary", rgb(vehicle.getVehicleCustomSecondaryColour(car)), bind.safe("Secondary", function(c)
+	menu:color("Màu phụ", rgb(vehicle.getVehicleCustomSecondaryColour(car)), bind.safe("Màu phụ", function(c)
 		vehicle.setVehicleCustomSecondaryColour(car, c.r, c.g, c.b)
 	end))
-	local neon = menu:toggle("Neon", vehicle.getVehicleNeonEnabled(car, 0), "Under the four sides", bind.safe("Neon", function(on)
+	local neon = menu:toggle("Đèn gầm (Neon)", vehicle.getVehicleNeonEnabled(car, 0), "Đèn lắp dưới bốn cạnh gầm xe", bind.safe("Đèn Neon", function(on)
 		for side = 0, 3 do
 			vehicle.setVehicleNeonEnabled(car, side, on)
 		end
 	end))
-	menu:color("Neon colour", rgb(vehicle.getVehicleNeonColour(car)), bind.safe("Neon colour", function(c)
+	menu:color("Màu đèn Neon", rgb(vehicle.getVehicleNeonColour(car)), bind.safe("Màu đèn Neon", function(c)
 		vehicle.setVehicleNeonColour(car, c.r, c.g, c.b)
 		if not neon.value then
 			for side = 0, 3 do
@@ -185,35 +185,35 @@ local function colours(menu: Menu, car: Vehicle)
 			neon.value = true
 		end
 	end))
-	menu:color("Tyre smoke", rgb(vehicle.getVehicleTyreSmokeColor(car)), bind.safe("Tyre smoke", function(c)
+	menu:color("Khói lốp xe", rgb(vehicle.getVehicleTyreSmokeColor(car)), bind.safe("Khói lốp xe", function(c)
 		vehicle.toggleVehicleMod(car, 20, true)
 		vehicle.setVehicleTyreSmokeColor(car, c.r, c.g, c.b)
 	end))
 end
 
 local function looks(menu: Menu, car: Vehicle)
-	menu:separator("Looks")
-	indexed(menu, "Window tint", vehicle.getNumVehicleWindowTints(), vehicle.getVehicleWindowTint(car), function(i)
-		return data.windowTints[i] or `Tint {i}`
+	menu:separator("Ngoại hình")
+	indexed(menu, "Độ tối kính xe", vehicle.getNumVehicleWindowTints(), vehicle.getVehicleWindowTint(car), function(i)
+		return data.windowTints[i] or `Màu kính {i}`
 	end, function(i)
 		vehicle.setVehicleWindowTint(car, i)
 	end)
-	indexed(menu, "Plate style", vehicle.getNumberOfVehicleNumberPlates(), vehicle.getVehicleNumberPlateTextIndex(car), function(i)
-		return data.plates[i] or `Style {i}`
+	indexed(menu, "Kiểu biển số", vehicle.getNumberOfVehicleNumberPlates(), vehicle.getVehicleNumberPlateTextIndex(car), function(i)
+		return data.plates[i] or `Kiểu {i}`
 	end, function(i)
 		vehicle.setVehicleNumberPlateTextIndex(car, i)
 	end)
-	menu:text("Plate", string.gsub(vehicle.getVehicleNumberPlateText(car), "%s+$", ""), { max = 8 }, bind.safe("Plate", function(text)
+	menu:text("Biển số xe", string.gsub(vehicle.getVehicleNumberPlateText(car), "%s+$", ""), { max = 8 }, bind.safe("Biển số xe", function(text)
 		vehicle.setVehicleNumberPlateText(car, text)
 	end))
-	indexed(menu, "Livery", vehicle.getVehicleLiveryCount(car), vehicle.getVehicleLivery(car), function(i)
-		return `Livery {i + 1}`
+	indexed(menu, "Tem trùm (Livery)", vehicle.getVehicleLiveryCount(car), vehicle.getVehicleLivery(car), function(i)
+		return `Tem {i + 1}`
 	end, function(i)
 		vehicle.setVehicleLivery(car, i)
 	end)
 	for id = 1, EXTRAS do
 		if vehicle.doesExtraExist(car, id) then
-			menu:toggle(`Extra {id}`, vehicle.isVehicleExtraTurnedOn(car, id), bind.safe("Extra", function(on)
+			menu:toggle(`Phụ kiện {id}`, vehicle.isVehicleExtraTurnedOn(car, id), bind.safe("Phụ kiện", function(on)
 				vehicle.setVehicleExtra(car, id, not on)
 			end))
 		end
@@ -226,12 +226,12 @@ local function build(menu: Menu, car: Vehicle)
 		menu:clear()
 		build(menu, car)
 	end
-	bind.action(menu, "Upgrade everything", { note = "Engine, brakes, armour, turbo, looks", action = "Upgrade" }, function(): string?
+	bind.action(menu, "Nâng cấp tối đa", { note = "Động cơ, phanh, giáp, turbo, ngoại hình", action = "Nâng cấp" }, function(): string?
 		M.maxUpgrade(car)
 		again()
-		return "Fully upgraded"
+		return "Đã nâng cấp tối đa"
 	end)
-	bind.action(menu, "Surprise me", { note = "Random parts and colours", action = "Roll" }, function(): string?
+	bind.action(menu, "Phối ngẫu nhiên", { note = "Phụ tùng và màu sơn ngẫu nhiên", action = "Quay số" }, function(): string?
 		M.randomize(car)
 		again()
 		return nil
@@ -239,7 +239,7 @@ local function build(menu: Menu, car: Vehicle)
 	colours(menu, car)
 	looks(menu, car)
 
-	menu:separator("Wheels")
+	menu:separator("Bánh xe")
 	-- The wheels of slot 23 are the type's: the menu is built again for a new type.
 	local types = {}
 	local kind = 0
@@ -247,12 +247,12 @@ local function build(menu: Menu, car: Vehicle)
 		table.insert(types, data.wheelTypes[kind])
 		kind += 1
 	end
-	menu:choice("Wheel type", types, math.clamp(vehicle.getVehicleWheelType(car) + 1, 1, #types), bind.safe("Wheel type", function(i: number)
+	menu:choice("Loại mâm xe", types, math.clamp(vehicle.getVehicleWheelType(car) + 1, 1, #types), bind.safe("Loại mâm xe", function(i: number)
 		vehicle.setVehicleWheelType(car, i - 1)
 		again()
 	end))
 
-	menu:separator("Performance and parts")
+	menu:separator("Hiệu năng và phụ tùng")
 	for slot = 0, SLOTS - 1 do
 		local name = slotName(car, slot)
 		if data.toggles[slot] then
@@ -265,7 +265,7 @@ local function build(menu: Menu, car: Vehicle)
 		else
 			local n = vehicle.getNumVehicleMods(car, slot)
 			if n > 0 then
-				local options = { "Stock" }
+				local options = { "Nguyên bản" }
 				for i = 0, n - 1 do
 					table.insert(options, game.label(vehicle.getModTextLabel(car, slot, i), `{name} {i + 1}`))
 				end
@@ -283,12 +283,12 @@ end
 
 -- The customs submenu of `root`: for the vehicle the player is in when it opens.
 function M.build(root: Menu)
-	local menu = root:submenu("Customs", "Parts, wheels, colours, neon, plate, extras")
-	menu:onOpen(bind.safe("Customs", function()
+	local menu = root:submenu("Độ xe (LS Customs)", "Phụ tùng, mâm xe, màu sơn, đèn gầm, biển số, phụ kiện")
+	menu:onOpen(bind.safe("Độ xe", function()
 		menu:clear()
 		local car = game.vehicle()
 		if not car then
-			menu:label("Get in a vehicle first.")
+			menu:label("Hãy lên một chiếc xe trước.")
 			return
 		end
 		build(menu, car)

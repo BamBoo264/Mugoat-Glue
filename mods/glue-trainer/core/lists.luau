@@ -18,7 +18,7 @@ function M.lazy(parent: Menu, label: string, note: string?, fill: (menu: Menu) -
 		menu:clear()
 		filled = fill(menu)
 		if not filled then
-			menu:label("The game's list is not read yet: open this again in a moment.")
+			menu:label("Danh sách của game chưa đọc xong: hãy mở lại sau giây lát.")
 		end
 	end))
 	return menu

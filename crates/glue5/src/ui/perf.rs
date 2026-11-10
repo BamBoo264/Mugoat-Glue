@@ -110,7 +110,7 @@ impl Threads {
                     self.main = Some(share);
                 }
                 let name = match t.name.strip_prefix("[RAGE] ") {
-                    _ if t.name.is_empty() => "(unnamed)".to_owned(),
+                    _ if t.name.is_empty() => "(không tên)".to_owned(),
                     Some(rest) => rest.to_owned(),
                     None => t.name,
                 };
@@ -184,7 +184,7 @@ impl PerfHud {
         // Where a frame's time goes: the engine's main thread, the renderer's
         // thread, the GPU.
         let main = self.threads.main.zip(f.frame).map(|(share, ms)| share / 100.0 * ms);
-        let costs = [("main", main, TEXT), ("render", f.render, TEXT), ("gpu", f.gpu, GPU)];
+        let costs = [("chính", main, TEXT), ("dựng", f.render, TEXT), ("gpu", f.gpu, GPU)];
         let costs: Vec<_> = costs.into_iter().filter_map(|(l, ms, c)| ms.map(|ms| (l, ms, c))).collect();
         let bound = costs.iter().map(|c| c.1).fold(0.0, f32::max);
         let threads = if full { self.threads.busiest.len() } else { 0 };
@@ -220,7 +220,7 @@ impl PerfHud {
             painter.text(pos2(right, y), Align2::RIGHT_TOP, value, font.clone(), color);
         };
         let frame = f.frame.map_or("–".into(), |ms| format!("{ms:.1} ms  tối đa {:.1}", f.longest));
-        row(y, "frame", frame, TEXT);
+        row(y, "khung", frame, TEXT);
         y += ROW;
         for (label, ms, color) in &costs {
             // The one a frame waits on, when it takes most of the frame.
@@ -249,15 +249,15 @@ impl PerfHud {
         }
         rule(y);
         y += 7.0;
-        row(y, "draws", format!("{} · {} lượt render · {} lượt gửi GPU", f.draws, f.passes, f.submits), TEXT);
+        row(y, "lệnh vẽ", format!("{} · {} lượt · {} gửi", f.draws, f.passes, f.submits), TEXT);
         y += ROW;
         match scaled {
             Some((bw, bh)) => {
-                row(y, "res", format!("{bw}×{bh} → {w}×{h}"), TEXT);
+                row(y, "độ p.giải", format!("{bw}×{bh} → {w}×{h}"), TEXT);
                 y += ROW;
-                row(y, "upscaler", upscaler(settings.upscaler).into(), TEXT);
+                row(y, "nâng hình", upscaler(settings.upscaler).into(), TEXT);
             }
-            None => row(y, "res", format!("{w}×{h}"), TEXT),
+            None => row(y, "độ p.giải", format!("{w}×{h}"), TEXT),
         }
         y += ROW;
         let gb = |bytes: u64| format!("{:.1} GB", bytes as f64 / (1u64 << 30) as f64);
@@ -265,7 +265,7 @@ impl PerfHud {
             Some(used) => format!("{} · gpu {}", gb(used), gb(f.gpu_bytes)),
             None => format!("gpu {}", gb(f.gpu_bytes)),
         };
-        row(y, "mem", memory, TEXT);
+        row(y, "bộ nhớ", memory, TEXT);
         rect
     }
 }

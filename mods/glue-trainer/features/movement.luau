@@ -48,7 +48,7 @@ local function noclip(menu: Menu)
 		end
 		moved = nil
 	end
-	local _, setNoclip = bind.feature(menu, "move.noclip", "Noclip", "Fly through everything, where the camera looks", {
+	local _, setNoclip = bind.feature(menu, "move.noclip", "Xuyên tường (Noclip)", "Bay xuyên mọi vật thể theo hướng nhìn", {
 		-- One flight at a time.
 		on = function()
 			if bind.on("move.freecam") then
@@ -84,7 +84,7 @@ local function freecam(menu: Menu)
 			view = nil
 		end
 	end
-	local _, setFreecam = bind.feature(menu, "move.freecam", "Free camera", "The view flies; you stay where you are", {
+	local _, setFreecam = bind.feature(menu, "move.freecam", "Camera tự do", "Chỉ góc nhìn bay đi; nhân vật vẫn đứng nguyên tại chỗ", {
 		on = function()
 			if bind.on("move.noclip") then
 				turn.noclip(false)
@@ -112,20 +112,20 @@ local function freecam(menu: Menu)
 		off = close,
 	})
 	turn.freecam = setFreecam
-	bind.slider(menu, "move.speed", "Flying speed", 10, 1, 100, { step = 1, unit = "m/s", note = "Sprint for four times as fast" }, function(v)
+	bind.slider(menu, "move.speed", "Tốc độ bay", 10, 1, 100, { step = 1, unit = "m/s", note = "Giữ nút Chạy nhanh để tăng tốc gấp 4 lần" }, function(v)
 		speed = v
 	end)
 end
 
 -- The game's camera distances behind the player on foot (CAM_VIEW_MODE), and first person.
-local VIEWS = { "Near", "Middle", "Far", "Cinematic", "First person" }
+local VIEWS = { "Gần", "Trung bình", "Xa", "Điện ảnh", "Góc nhìn thứ nhất" }
 
 local function view(menu: Menu)
-	menu:separator("View")
-	menu:choice("Camera", VIEWS, math.clamp(camera.getFollowPedCamViewMode() + 1, 1, #VIEWS), "How far behind you the camera is", bind.safe("Camera", function(i: number)
+	menu:separator("Góc nhìn")
+	menu:choice("Góc máy ảnh", VIEWS, math.clamp(camera.getFollowPedCamViewMode() + 1, 1, #VIEWS), "Khoảng cách góc nhìn sau lưng bạn", bind.safe("Góc máy ảnh", function(i: number)
 		camera.setFollowPedCamViewMode(i - 1)
 	end))
-	bind.feature(menu, "move.noBoundary", "No edge of the world", "Fly or sail as far as you like", {
+	bind.feature(menu, "move.noBoundary", "Xóa ranh giới bản đồ", "Bay hoặc đi tàu ra xa bao nhiêu tùy thích", {
 		on = function()
 			player.extendWorldBoundaryForPlayer(vector.create(100000, 100000, 0))
 			player.extendWorldBoundaryForPlayer(vector.create(-100000, -100000, 0))
@@ -137,7 +137,7 @@ local function view(menu: Menu)
 end
 
 function M.build(root: Menu)
-	local menu = root:submenu("Movement", "Noclip, a free camera, the view, the edge of the world")
+	local menu = root:submenu("Di chuyển", "Xuyên tường, camera tự do, góc nhìn, ranh giới thế giới")
 	noclip(menu)
 	freecam(menu)
 	view(menu)

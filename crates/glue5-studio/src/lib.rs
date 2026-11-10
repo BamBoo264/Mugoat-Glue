@@ -126,7 +126,7 @@ fn Shell(s: S) -> impl IntoView {
     let loaded = RwSignal::new(EDITOR.with(|e| e.borrow().is_some()));
     if !loaded.get_untracked() {
         let done = Closure::<dyn FnMut(JsValue)>::new(move |_: JsValue| loaded.set(true));
-        let failed = Closure::<dyn FnMut(JsValue)>::new(move |_: JsValue| s.notice.set(Some("The editor did not load: reload the page".into())));
+        let failed = Closure::<dyn FnMut(JsValue)>::new(move |_: JsValue| s.notice.set(Some("Không tải được trình soạn thảo: hãy tải lại trang".into())));
         let _ = editor::load_editor().then2(&done, &failed);
         done.forget();
         failed.forget();
@@ -217,7 +217,7 @@ fn Shell(s: S) -> impl IntoView {
             <StatusBar s=s/>
             <PhoneNav s=s/>
             <sidebar::ContextMenu s=s/>
-            {move || s.notice.get().map(|n| view! { <div class="toast" title="Close" on:click=move |_| s.notice.set(None)>{n}</div> })}
+            {move || s.notice.get().map(|n| view! { <div class="toast" title="Đóng" on:click=move |_| s.notice.set(None)>{n}</div> })}
         </div>
     }
 }

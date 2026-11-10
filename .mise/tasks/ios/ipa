@@ -10,7 +10,7 @@ payload=$PWD/target/ios/Payload
 rm -rf "$payload" "$ipa"
 mkdir -p "$payload"
 cp -R "$app" "$payload/"
-codesign --force --sign - --entitlements platform/ios/Glue5.entitlements "$payload/${app##*/}"
+codesign --force --sign - --entitlements platform/ios/Glue5.entitlements --generate-entitlement-der "$payload/${app##*/}"
 (cd "${payload%/*}" && zip -qry "$ipa" Payload)
 rm -rf "$payload"
 echo "built $ipa (unsigned)"

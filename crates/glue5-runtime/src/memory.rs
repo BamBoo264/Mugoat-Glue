@@ -28,14 +28,14 @@ impl WasmMemory {
             let bytes = (max_pages * PAGE_SIZE) as usize;
             if let Some(base) = map(bytes) {
                 if !commit(base, 0, MEMORY_INITIAL_PAGES * PAGE_SIZE) {
-                    bail!("cannot commit {} MiB for the wasm memory", (MEMORY_INITIAL_PAGES * PAGE_SIZE) >> 20);
+                    bail!("không thể cấp phát {} MiB cho bộ nhớ wasm", (MEMORY_INITIAL_PAGES * PAGE_SIZE) >> 20);
                 }
                 log::info!("wasm memory: {} MiB reserved at {base:p}", bytes >> 20);
                 let desc = unsafe { Memory::new(base, MEMORY_INITIAL_PAGES, max_pages) };
                 return Ok(WasmMemory { desc, base, max_pages });
             }
             if max_pages / 2 < MEMORY_INITIAL_PAGES {
-                bail!("cannot reserve {} MiB for the wasm memory", (MEMORY_INITIAL_PAGES * PAGE_SIZE) >> 20);
+                bail!("không thể giữ trước {} MiB cho bộ nhớ wasm", (MEMORY_INITIAL_PAGES * PAGE_SIZE) >> 20);
             }
             max_pages /= 2;
         }

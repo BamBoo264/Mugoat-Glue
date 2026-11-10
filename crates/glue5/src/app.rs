@@ -55,8 +55,8 @@ pub fn run() -> Result<()> {
     // then drains the queue, which is what this loop does anyway.
     #[cfg(target_os = "android")]
     sdl3::hint::set("SDL_POLL_SENTINEL", "0");
-    let sdl = sdl3::init().map_err(|e| anyhow!("SDL: {e}"))?;
-    let video = sdl.video().map_err(|e| anyhow!("SDL video: {e}"))?;
+    let sdl = sdl3::init().map_err(|e| anyhow!("Khởi tạo SDL thất bại: {e}"))?;
+    let video = sdl.video().map_err(|e| anyhow!("Hệ thống hiển thị SDL lỗi: {e}"))?;
     if MOBILE {
         sdl3::hint::set("SDL_ORIENTATIONS", "LandscapeLeft LandscapeRight");
         // Touches drive the touch controls, not a pretend mouse.
@@ -118,7 +118,7 @@ pub fn run() -> Result<()> {
     let surface = unsafe {
         let view = sdl3::sys::metal::SDL_Metal_CreateView(window.raw());
         let layer = sdl3::sys::metal::SDL_Metal_GetLayer(view);
-        anyhow::ensure!(!layer.is_null(), "no Metal layer for the window: {}", sdl3::get_error());
+        anyhow::ensure!(!layer.is_null(), "không tìm thấy lớp Metal cho cửa sổ: {}", sdl3::get_error());
         instance.create_surface_unsafe(wgpu::SurfaceTargetUnsafe::CoreAnimationLayer(layer))?
     };
     let screen = Screen::open(glue5_gpu::Window {
@@ -153,7 +153,7 @@ pub fn run() -> Result<()> {
     let watched = presentation.clone();
     let lifecycle = Arc::new(Lifecycle::default());
     let life = lifecycle.clone();
-    let _watch = sdl.event().map_err(|e| anyhow!("SDL events: {e}"))?.add_event_watch(move |event: Event| match event {
+    let _watch = sdl.event().map_err(|e| anyhow!("Sự kiện SDL lỗi: {e}"))?.add_event_watch(move |event: Event| match event {
         Event::Window { win_event: WindowEvent::PixelSizeChanged(w, h), .. } => {
             watched.set_size(w.max(0) as u32, h.max(0) as u32)
         }
@@ -200,9 +200,9 @@ pub fn run() -> Result<()> {
     };
     let last_benchmark = benchmark::last(&user_dir);
     let mut app = App {
-        pads: pads::Pads::new(sdl.gamepad().map_err(|e| anyhow!("SDL gamepad: {e}"))?),
+        pads: pads::Pads::new(sdl.gamepad().map_err(|e| anyhow!("Tay cầm SDL lỗi: {e}"))?),
         mouse: sdl.mouse(),
-        events: sdl.event_pump().map_err(|e| anyhow!("SDL events: {e}"))?,
+        events: sdl.event_pump().map_err(|e| anyhow!("Hàng đợi sự kiện SDL lỗi: {e}"))?,
         sdl,
         window,
         #[cfg(target_os = "android")]
@@ -261,6 +261,7 @@ pub fn run() -> Result<()> {
         // The setting went back to the phone's driver.
         app.settings.save(&app.user_dir);
     }
+    paths::prepare_documents();
     app.find_game(args.game_dir.as_deref());
     if args.play {
         match app.settings.source {
@@ -1145,8 +1146,8 @@ impl App {
         self.mouse.show_cursor(true);
         let page = if MOBILE { "màn hình chính sẽ hiện khi mở lại ứng dụng" } else { "màn hình chính" };
         let text = format!(
-            "The game has stopped: {why}.\n\nIf it stops again at the same point, one of its graphics settings \
-             may be the cause: {page} can put them back to their defaults."
+            "Trò chơi đã dừng đột ngột: {why}.\n\nNếu sự cố lặp lại tại cùng vị trí, một tuỳ chọn đồ hoạ có thể là nguyên nhân: \
+             {page} cho phép đặt lại cấu hình đồ hoạ về mặc định."
         );
         use sdl3::messagebox::{ButtonData, ClickedButton, MessageBoxButtonFlag as Button, MessageBoxFlag};
         let buttons: &[ButtonData] = if MOBILE {
@@ -1236,8 +1237,8 @@ impl App {
             self.studio = None;
         }
         self.ui.repaint();
-        // The game's files may have been copied in meanwhile (Finder, the
-        // Files app, adb). Not for a server, whose copy is found once ready.
+        paths::prepare_documents();
+        // Dữ liệu game có thể vừa được chép vào (qua Finder, Tệp, adb).
         if self.game.is_none() && self.game_dir.is_none() && self.settings.source == Source::Folder {
             self.find_game(None);
         }

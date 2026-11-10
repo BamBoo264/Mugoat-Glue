@@ -13,19 +13,19 @@ pub(crate) fn BottomPanel(s: S) -> impl IntoView {
     view! {
         <div class="panel">
             <div class="ptabs">
-                <button class=move || if s.panel.get() == Panel::Console { "ptab on" } else { "ptab" } on:click=move |_| s.panel.set(Panel::Console)>"CONSOLE"</button>
+                <button class=move || if s.panel.get() == Panel::Console { "ptab on" } else { "ptab" } on:click=move |_| s.panel.set(Panel::Console)>"BẢNG LỆNH"</button>
                 <button class=move || if s.panel.get() == Panel::Problems { "ptab on" } else { "ptab" } on:click=move |_| s.panel.set(Panel::Problems)>
-                    "PROBLEMS" <Show when=move || errors() != 0><span class="cnt">{errors}</span></Show>
+                    "VẤN ĐỀ" <Show when=move || errors() != 0><span class="cnt">{errors}</span></Show>
                 </button>
                 <div class="grow"></div>
                 <Show when=move || s.panel.get() == Panel::Console>
                     <div class="chips">
-                        <button class=move || if s.filter.get() == Filter::All { "chip on" } else { "chip" } on:click=move |_| s.filter.set(Filter::All)>"All"</button>
+                        <button class=move || if s.filter.get() == Filter::All { "chip on" } else { "chip" } on:click=move |_| s.filter.set(Filter::All)>"Tất cả"</button>
                         <button class=move || if s.filter.get() == Filter::Current { "chip on" } else { "chip" } on:click=move |_| s.filter.set(Filter::Current)>
-                            {move || s.active.get().filter(|p| p.contains('/')).map(|p| mod_of(&p).to_string()).unwrap_or_else(|| "This mod".into())}
+                            {move || s.active.get().filter(|p| p.contains('/')).map(|p| mod_of(&p).to_string()).unwrap_or_else(|| "Mod này".into())}
                         </button>
-                        <button class=move || if s.filter.get() == Filter::Errors { "chip on" } else { "chip" } on:click=move |_| s.filter.set(Filter::Errors)>"Errors"</button>
-                        <button class="chip" title="Clear" on:click=move |_| s.rows.set(Vec::new())>"Clear"</button>
+                        <button class=move || if s.filter.get() == Filter::Errors { "chip on" } else { "chip" } on:click=move |_| s.filter.set(Filter::Errors)>"Lỗi"</button>
+                        <button class="chip" title="Xóa" on:click=move |_| s.rows.set(Vec::new())>"Xóa"</button>
                     </div>
                 </Show>
             </div>
@@ -132,7 +132,7 @@ pub(crate) fn Console(s: S) -> impl IntoView {
         }>
             <span class="gt">"›"</span>
             <div class="repl-host" node_ref=input_ref></div>
-            <button class="btn primary small" on:click=move |_| with_editor(|e| e.run_repl())>"Run"</button>
+            <button class="btn primary small" on:click=move |_| with_editor(|e| e.run_repl())>"Chạy"</button>
         </div>
     }
 }
@@ -149,7 +149,7 @@ pub(crate) fn Problems(s: S) -> impl IntoView {
             {move || {
                 let l = list();
                 if l.is_empty() {
-                    return view! { <p class="empty">"No problems in the open files."</p> }.into_any();
+                    return view! { <p class="empty">"Không có vấn đề nào trong các tệp đang mở."</p> }.into_any();
                 }
                 l.into_iter().map(|(path, d)| {
                     let (p, line, col) = (path.clone(), d.line, d.column);

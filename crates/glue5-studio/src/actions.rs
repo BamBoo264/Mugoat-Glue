@@ -32,7 +32,7 @@ pub(crate) fn close_mod(s: S, name: &str) {
 
 /// A new mod, asked for by name; its main.luau opens.
 pub(crate) fn new_mod(s: S) {
-    let Some(name) = web_sys::window().and_then(|w| w.prompt_with_message("New mod's name (lowercase, digits, - and _):").ok().flatten()) else { return };
+    let Some(name) = web_sys::window().and_then(|w| w.prompt_with_message("Tên mod mới (chữ thường, số, - và _):").ok().flatten()) else { return };
     let name = name.trim().to_lowercase();
     if name.is_empty() {
         return;
@@ -51,7 +51,7 @@ pub(crate) fn new_mod(s: S) {
 /// for by name (`core/prefs.luau` makes it in a folder), then opened.
 pub(crate) fn new_file(s: S, name: &str) {
     let Some(file) = web_sys::window()
-        .and_then(|w| w.prompt_with_message_and_default("New file's name (in a folder: folder/name.luau):", "module.luau").ok().flatten())
+        .and_then(|w| w.prompt_with_message_and_default("Tên tệp mới (trong thư mục: folder/ten.luau):", "module.luau").ok().flatten())
     else {
         return;
     };
@@ -70,7 +70,7 @@ pub(crate) fn new_file(s: S, name: &str) {
 /// name; its tabs follow.
 pub(crate) fn rename_file(s: S, path: &str) {
     let Some((name, file)) = path.split_once('/') else { return };
-    let Some(new) = web_sys::window().and_then(|w| w.prompt_with_message_and_default("Rename or move to (folder/name moves it):", file).ok().flatten()) else {
+    let Some(new) = web_sys::window().and_then(|w| w.prompt_with_message_and_default("Đổi tên hoặc di chuyển tới (thư_mục/tên):", file).ok().flatten()) else {
         return;
     };
     let new = new.trim().to_string();
@@ -127,9 +127,9 @@ fn rename_now(s: S, from: String, to: String) {
 
 /// Deletes a file, or a folder with what it holds, once confirmed.
 pub(crate) fn delete_file(s: S, path: &str, folder: bool) {
-    let what = if folder { format!("{path} and everything in it") } else { path.to_string() };
+    let what = if folder { format!("{path} và toàn bộ nội dung bên trong") } else { path.to_string() };
     let ok = web_sys::window()
-        .and_then(|w| w.confirm_with_message(&format!("Delete {what}? It cannot be undone.")).ok())
+        .and_then(|w| w.confirm_with_message(&format!("Xóa {what}? Thao tác không thể hoàn tác.")).ok())
         .unwrap_or(false);
     if !ok {
         return;
@@ -152,7 +152,7 @@ pub(crate) fn delete_file(s: S, path: &str, folder: bool) {
 /// A new folder in `name` (a mod or one of its folders), with a first file
 /// in it: folders hold files.
 pub(crate) fn new_folder(s: S, name: &str) {
-    let Some(folder) = web_sys::window().and_then(|w| w.prompt_with_message("New folder's name:").ok().flatten()) else {
+    let Some(folder) = web_sys::window().and_then(|w| w.prompt_with_message("Tên thư mục mới:").ok().flatten()) else {
         return;
     };
     let folder = folder.trim().trim_matches('/').to_string();
@@ -172,7 +172,7 @@ pub(crate) fn import(s: S) {
         }
     });
     let failed = Closure::<dyn FnMut(JsValue)>::new(move |e: JsValue| {
-        s.notice.set(Some(format!("Import: {}", e.as_string().unwrap_or_else(|| "it failed".into()))));
+        s.notice.set(Some(format!("Nhập mod: {}", e.as_string().unwrap_or_else(|| "thất bại".into()))));
     });
     let _ = crate::editor::import_mod(&format!("/import?token={token}")).then2(&done, &failed);
     done.forget();
@@ -246,7 +246,7 @@ pub(crate) fn close_tab(s: S, path: &str) {
     let dirty = s.tabs.with_untracked(|t| t.iter().any(|t| t.path == path && t.dirty));
     if dirty
         && !web_sys::window()
-            .and_then(|w| w.confirm_with_message(&format!("{path} has unsaved changes. Close it?")).ok())
+            .and_then(|w| w.confirm_with_message(&format!("{path} có thay đổi chưa lưu. Vẫn đóng?")).ok())
             .unwrap_or(false)
     {
         return;
@@ -259,7 +259,7 @@ pub(crate) fn close_tab(s: S, path: &str) {
 pub(crate) fn insert_code(s: S, code: &str) {
     let writable = active_file(s).filter(|p| s.tabs.with_untracked(|t| t.iter().any(|t| &t.path == p && !t.read_only)));
     if writable.is_none() {
-        s.notice.set(Some("Open one of the mod's files first: it goes in at the cursor".into()));
+        s.notice.set(Some("Hãy mở một tệp mã của mod trước để chèn tại vị trí con trỏ".into()));
         return;
     }
     s.screen.set(Screen::Editor);

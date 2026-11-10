@@ -285,7 +285,7 @@ impl MenusView {
     fn root(&mut self, ui: &mut Ui, menus: &[Menu], mods: &[(&str, &str)], landing: &mut Landing) {
         let mut top: Vec<&Menu> = menus.iter().filter(|m| m.parent.is_none()).collect();
         if top.is_empty() {
-            muted(ui, "Chưa có menu. Bản mod có thể tạo bằng ui.menu(\"Title\"). Nhấn F7 trong trò chơi để mở.");
+            muted(ui, "Chưa có menu. Bản mod có thể tạo bằng ui.menu(\"Tiêu đề\"). Nhấn F7 trong trò chơi để mở.");
             return;
         }
         // Stable: a mod's menus stay in the order they were made.

@@ -81,7 +81,7 @@ pub fn list(user_dir: &Path) -> Vec<Package> {
 /// Adds the package in `zip` (one with the same name is replaced: a newer
 /// build of it).
 pub fn add(user_dir: &Path, zip: &[u8]) -> Result<Package, String> {
-    let mut files = glue5_mods::zip::read_up_to(zip, MAX_FILES, MAX_SIZE, "a GPU driver package")?;
+    let mut files = glue5_mods::zip::read_up_to(zip, MAX_FILES, MAX_SIZE, "gói trình điều khiển GPU")?;
     // Zipped in a folder of its own, or not.
     if let Some((top, _)) = files.first().and_then(|(n, _)| n.split_once('/'))
         && files.iter().all(|(n, _)| n.starts_with(top) && n[top.len()..].starts_with('/'))
@@ -92,13 +92,13 @@ pub fn add(user_dir: &Path, zip: &[u8]) -> Result<Package, String> {
         }
     }
     if files.iter().any(|(n, _)| n.contains('/')) {
-        return Err("not a GPU driver package: it has folders".into());
+        return Err("không phải gói trình điều khiển GPU: bên trong có thư mục con".into());
     }
-    let meta = files.iter().find(|(n, _)| n == "meta.json").ok_or("not a GPU driver package: no meta.json")?;
-    let meta: Meta = serde_json::from_slice(&meta.1).map_err(|e| format!("its meta.json: {e}"))?;
+    let meta = files.iter().find(|(n, _)| n == "meta.json").ok_or("không phải gói trình điều khiển GPU: thiếu tệp meta.json")?;
+    let meta: Meta = serde_json::from_slice(&meta.1).map_err(|e| format!("tệp meta.json lỗi: {e}"))?;
     let library = files.iter().find(|(n, _)| *n == meta.library_name);
     if !library.is_some_and(|(_, data)| data.starts_with(b"\x7fELF")) {
-        return Err(format!("the package has no driver library ({})", meta.library_name));
+        return Err(format!("gói không có thư viện trình điều khiển ({})", meta.library_name));
     }
     let id = id(&meta.name);
     let (to, tmp) = (dir(user_dir).join(&id), dir(user_dir).join(format!(".{id}.tmp")));
@@ -113,7 +113,7 @@ pub fn add(user_dir: &Path, zip: &[u8]) -> Result<Package, String> {
     })();
     if let Err(e) = written {
         let _ = std::fs::remove_dir_all(&tmp);
-        return Err(format!("cannot unpack it: {e}"));
+        return Err(format!("không thể giải nén: {e}"));
     }
     Ok(Package { id, name: meta.name, library: meta.library_name })
 }
@@ -149,16 +149,16 @@ pub fn instance(user_dir: &Path, chosen: &mut Option<String>) -> (wgpu::Instance
         Some(why)
     };
     let why = match package {
-        None => failed(format!("The GPU driver {id} is no longer there: the phone's is in use.")),
+        None => failed(format!("Trình điều khiển GPU {id} không còn tồn tại: đang dùng trình điều khiển mặc định của máy.")),
         Some(p) if mark.exists() => failed(format!(
-            "The GPU driver {} stopped Glue 5 before its start page last time: the phone's is in use again.",
+            "Trình điều khiển GPU {} đã làm Mugoat Glue dừng trước khi vào màn hình chính ở lần mở trước: đang dùng lại trình điều khiển của máy.",
             p.name
         )),
         Some(p) => {
             let _ = std::fs::write(&mark, &p.id);
             match glue5_gpu::instance_with_driver(&dir(user_dir).join(&p.id), &p.library) {
                 Ok(instance) => return (instance, None),
-                Err(e) => failed(format!("The GPU driver {} did not open: {e:#}. The phone's is in use.", p.name)),
+                Err(e) => failed(format!("Trình điều khiển GPU {} không khởi tạo được: {e:#}. Đang dùng trình điều khiển mặc định của máy.", p.name)),
             }
         }
     };
@@ -174,7 +174,7 @@ pub fn device_failed(user_dir: &Path, chosen: &mut Option<String>, e: &anyhow::E
     let id = chosen.take().unwrap_or_default();
     let name = list(user_dir).into_iter().find(|p| p.id == id).map_or(id, |p| p.name);
     shown(user_dir);
-    let why = format!("The GPU driver {name} could not open the GPU: {e:#}. The phone's is in use.");
+    let why = format!("Trình điều khiển GPU {name} không mở được GPU: {e:#}. Đang dùng trình điều khiển mặc định của máy.");
     log::warn!("gpu: {why}");
     why
 }

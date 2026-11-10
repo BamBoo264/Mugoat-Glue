@@ -369,7 +369,7 @@ fn stepper(ui: &mut Ui, row: &Row, shown: &str, item: u32, draft: &mut Option<Dr
     let prev = Rect::from_min_size(inner.min, vec2(side, side));
     let next = Rect::from_min_size(pos2(inner.right() - side, inner.top()), vec2(side, side));
     let mut delta = 0;
-    for (rect, glyph, step, name) in [(prev, "‹", -1, "prev"), (next, "›", 1, "next")] {
+    for (rect, glyph, step, name) in [(prev, "‹", -1, "Trước"), (next, "›", 1, "Tiếp theo")] {
         let response = ui.interact(rect, row.response.id.with(name), Sense::CLICK);
         if response.hovered() || response.is_pointer_button_down_on() {
             ui.painter().rect_filled(

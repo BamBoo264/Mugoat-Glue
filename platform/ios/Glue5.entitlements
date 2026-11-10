@@ -2,10 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<!-- The engine wants ~3 GB of memory. Its address range shrinks to what
-	     the OS grants (extended virtual addressing would allow 16 GB, but
-	     personal development teams cannot have it and phones need less). -->
+	<!-- Request extended RAM and extended virtual address space for GTA V. -->
 	<key>com.apple.developer.kernel.increased-memory-limit</key>
+	<true/>
+	<key>com.apple.developer.kernel.extended-virtual-addressing</key>
 	<true/>
 </dict>
 </plist>

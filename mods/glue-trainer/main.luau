@@ -11,8 +11,8 @@ local keys = require("./core/keys")
 local loop = require("./core/loop")
 local hub = require("./features/hub")
 
-local root = ui.menu("Glue Trainer", "You, vehicles, weapons, the world")
-keys.action("menu", "Open the trainer", function()
+local root = ui.menu("Glue Trainer", "Nhân vật, phương tiện, vũ khí, thế giới")
+keys.action("menu", "Mở bộ hỗ trợ", function()
 	root:show()
 end)
 

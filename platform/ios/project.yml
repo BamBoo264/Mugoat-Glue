@@ -55,6 +55,7 @@ targets:
       path: Info.plist
       properties:
         CFBundleDisplayName: Mugoat Glue
+        CFBundleName: Mugoat Glue
         CFBundleDevelopmentRegion: vi
         CFBundleLocalizations: [vi]
         UILaunchScreen: {}

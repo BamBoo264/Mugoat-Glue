@@ -15,8 +15,8 @@ local search: Menu
 local favourites: Menu
 
 function M.rows(root: Menu)
-	search = root:submenu("Search", { note = "Every feature, by name", search = true })
-	favourites = root:submenu("Favourites", "The features you use most")
+	search = root:submenu("Tìm kiếm", { note = "Mọi tính năng, tìm theo tên", search = true })
+	favourites = root:submenu("Yêu thích", "Những tính năng bạn dùng thường xuyên")
 end
 
 -- `label (place)`: an entry as the favourites' list names it.
@@ -27,7 +27,7 @@ end
 function M.build()
 	local entries = bind.entries()
 	local filled = false
-	search:onOpen(bind.safe("Search", function()
+	search:onOpen(bind.safe("Tìm kiếm", function()
 		if filled then
 			return
 		end
@@ -61,7 +61,7 @@ function M.build()
 			table.insert(kept, n)
 		end
 	end
-	favourites:multi("Pick them", names, kept, "From every menu, with a search", bind.safe("Favourites", function(_, chosen)
+	favourites:multi("Chọn mục yêu thích", names, kept, "Từ mọi menu, có tìm kiếm nhanh", bind.safe("Yêu thích", function(_, chosen)
 		prefs.data.favourites = chosen
 		prefs.save()
 		show()

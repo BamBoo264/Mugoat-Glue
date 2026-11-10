@@ -30,67 +30,67 @@ mod.onStop(stopWatching)
 
 local function about(who: Player): string
 	local p = player.getPlayerPed(who)
-	local parts = { `{entity.getEntityHealth(p)} health`, `{ped.getPedArmour(p)} armour` }
+	local parts = { `{entity.getEntityHealth(p)} máu`, `{ped.getPedArmour(p)} giáp` }
 	local car = ped.getVehiclePedIsIn(p, false)
 	if car then
 		table.insert(parts, game.label(vehicle.getDisplayNameFromVehicleModel(entity.getEntityModel(car))))
 	end
-	table.insert(parts, `{math.floor(geo.distance(game.position(), entity.getEntityCoords(p, true)))} m away`)
+	table.insert(parts, `cách {math.floor(geo.distance(game.position(), entity.getEntityCoords(p, true)))} m`)
 	return table.concat(parts, " · ")
 end
 
 -- Pickups the game has for health and armour (the base game's).
-local PICKUPS = { { "Health", "PICKUP_HEALTH_STANDARD" }, { "Armour", "PICKUP_ARMOUR_STANDARD" } }
+local PICKUPS = { { "Máu", "PICKUP_HEALTH_STANDARD" }, { "Áo giáp", "PICKUP_ARMOUR_STANDARD" } }
 
 -- What can be given to a player: made next to them, networked, so they see it too.
 local function gifts(menu: Menu, who: Player, name: string)
 	local them = function(): Ped
 		return player.getPlayerPed(who)
 	end
-	menu:separator("Give")
-	local cars = menu:submenu("A vehicle", `Next to {name}, engine running`)
-	spawner.picker(cars, "Give", function(entry: catalog.VehicleEntry): string?
+	menu:separator("Tặng quà")
+	local cars = menu:submenu("Tặng một chiếc xe", `Xuất hiện cạnh {name}, máy đã nổ sẵn`)
+	spawner.picker(cars, "Tặng", function(entry: catalog.VehicleEntry): string?
 		local p = them()
 		local car, why = spawner.spawnAt(entry.hash, entity.getOffsetFromEntityInWorldCoords(p, vector.create(3, 4, 0)), entity.getEntityHeading(p))
-		return if car then `{entry.name} for {name}` else why
+		return if car then `Đã tặng {entry.name} cho {name}` else why
 	end)
-	bind.action(menu, "Every weapon", { note = "With full ammo, a parachute too", action = "Give" }, function(): string?
+	bind.action(menu, "Tặng toàn bộ vũ khí", { note = "Kèm đầy đạn và dù lượn", action = "Tặng" }, function(): string?
 		local p = them()
 		for _, w in catalog.weapons() do
 			weapon.giveWeaponToPed(p, w.hash, 9999, false, false)
 		end
 		weapon.giveWeaponToPed(p, joaat("GADGET_PARACHUTE"), 1, false, false)
-		return `Armed {name}`
+		return `Đã trang bị vũ khí cho {name}`
 	end)
 	for _, pick in PICKUPS do
-		bind.action(menu, pick[1], { note = "A pickup at their feet", action = "Drop" }, function(): string?
+		bind.action(menu, pick[1], { note = "Thả vật phẩm ngay dưới chân họ", action = "Thả" }, function(): string?
 			local at = entity.getOffsetFromEntityInWorldCoords(them(), vector.create(0, 1.5, 0))
 			local made = object.createPickupRotate(joaat(pick[2]), at, vector.zero, 512, 0, 2, true, 0)
-			return if made then nil else "The game made none"
+			return if made then nil else "Game không tạo được vật phẩm"
 		end)
 	end
-	bind.action(menu, "A bodyguard", { note = "Armed, by their side, against what attacks them", action = "Send" }, function(): string?
+	bind.action(menu, "Gửi một vệ sĩ", { note = "Có vũ trang, đi theo bảo vệ họ", action = "Gửi" }, function(): string?
 		local model = joaat("s_m_y_blackops_01")
 		if not streaming.load(model) then
-			return "That model did not load"
+			return "Không tải được mô hình vệ sĩ"
 		end
 		local p = them()
 		local guard = ped.createPed(26, model, entity.getOffsetFromEntityInWorldCoords(p, vector.create(-2, -2, 0)), entity.getEntityHeading(p), true, false)
 		streaming.setModelAsNoLongerNeeded(model)
 		if not guard then
-			return "The game made none"
+			return "Game không tạo được vệ sĩ"
 		end
 		weapon.giveWeaponToPed(guard, joaat("WEAPON_CARBINERIFLE"), 9999, false, true)
 		ped.setPedRelationshipGroupHash(guard, joaat("PLAYER"))
 		ped.setPedAccuracy(guard, 80)
 		ped.setPedKeepTask(guard, true)
 		task.taskFollowToOffsetOfEntity(guard, p, vector.create(-1.5, -1.5, 0), 2, -1, 1, true)
-		return `A bodyguard for {name}`
+		return `Đã gửi vệ sĩ cho {name}`
 	end)
-	bind.action(menu, "Fireworks", { note = "Over their head, for everyone to see", action = "Fire" }, function(): string?
+	bind.action(menu, "Bắn pháo hoa", { note = "Nổ trên bầu trời phía trên họ, ai cũng thấy", action = "Bắn" }, function(): string?
 		local asset = "scr_indep_fireworks"
 		if not streaming.load(asset, "ptfx") then
-			return "The fireworks did not load"
+			return "Không tải được hiệu ứng pháo hoa"
 		end
 		local p = them()
 		for i = 1, 6 do
@@ -108,15 +108,15 @@ local function playerMenu(menu: Menu, who: Player, name: string)
 	local them = function(): Ped
 		return player.getPlayerPed(who)
 	end
-	sub:separator("Go")
-	bind.action(sub, "Go to them", { action = "Go" }, function(): string?
+	sub:separator("Di chuyển")
+	bind.action(sub, "Đi tới chỗ họ", { action = "Đi" }, function(): string?
 		game.teleport(entity.getEntityCoords(them(), true) + vector.create(0, 0, 1), false)
 		return nil
 	end)
-	bind.action(sub, "Into their vehicle", { note = "A free seat", action = "Get in" }, function(): string?
+	bind.action(sub, "Lên xe của họ", { note = "Ghế còn trống", action = "Lên xe" }, function(): string?
 		local car = ped.getVehiclePedIsIn(them(), false)
 		if not car then
-			return `{name} is on foot`
+			return `{name} đang đi bộ`
 		end
 		for seat = 0, vehicle.getVehicleMaxNumberOfPassengers(car) - 1 do
 			if vehicle.isVehicleSeatFree(car, seat, false) then
@@ -124,37 +124,37 @@ local function playerMenu(menu: Menu, who: Player, name: string)
 				return nil
 			end
 		end
-		return "No free seat"
+		return "Không còn ghế trống"
 	end)
-	bind.action(sub, "Mark them on the map", { note = "The waypoint where they are now", action = "Mark" }, function(): string?
+	bind.action(sub, "Đánh dấu trên bản đồ", { note = "Đặt điểm đánh dấu vào vị trí của họ", action = "Đánh dấu" }, function(): string?
 		world.setWaypoint(entity.getEntityCoords(them(), true))
 		return nil
 	end)
-	sub:toggle("Watch them", watching == who, "Your view follows them", bind.safe("Watch them", function(on)
+	sub:toggle("Theo dõi (Spectate)", watching == who, "Góc nhìn bám theo họ", bind.safe("Theo dõi", function(on)
 		stopWatching()
 		if on then
 			network.networkSetInSpectatorMode(true, them())
 			watching = who
 		end
 	end))
-	bind.action(sub, "Follow them", { note = "Your vehicle drives behind theirs, wherever they go", action = "Follow" }, function(): string?
+	bind.action(sub, "Bám đuôi tự động", { note = "Xe bạn sẽ chạy theo sau xe của họ bất kể đi đâu", action = "Đi theo" }, function(): string?
 		local mine, theirs = game.vehicle(), ped.getVehiclePedIsIn(them(), false)
 		if not mine then
-			return "Get in a vehicle first"
+			return "Hãy lên một chiếc xe trước"
 		end
 		if not theirs then
-			return `{name} is on foot`
+			return `{name} đang đi bộ`
 		end
 		-- Behind them (mode -1), at up to 40 m/s, driving around traffic.
 		task.taskVehicleEscort(game.me(), mine, theirs, -1, 40, 786603, 8, 20, 20)
-		return `Following {name}: brake or use Vehicle › Autopilot › Stop`
+		return `Đang bám theo {name}: phanh hoặc vào Phương tiện › Tự lái › Dừng tự lái`
 	end)
 	gifts(sub, who, name)
-	sub:separator("Them")
-	bind.action(sub, "Wear their outfit", { note = "When you are the same model", action = "Copy" }, function(): string?
+	sub:separator("Tương tác")
+	bind.action(sub, "Mặc trang phục của họ", { note = "Khi dùng chung mô hình nhân vật", action = "Sao chép" }, function(): string?
 		local me, p = game.me(), them()
 		if entity.getEntityModel(me) ~= entity.getEntityModel(p) then
-			return "You are another model"
+			return "Bạn đang dùng mô hình nhân vật khác"
 		end
 		for slot = 0, 11 do
 			ped.setPedComponentVariation(me, slot, ped.getPedDrawableVariation(p, slot), ped.getPedTextureVariation(p, slot), ped.getPedPaletteVariation(p, slot))
@@ -180,7 +180,7 @@ local function tags(menu: Menu)
 		end
 		shown = {}
 	end
-	bind.feature(menu, "players.tags", "Name tags", "Over every player's head", {
+	bind.feature(menu, "players.tags", "Thẻ tên trên đầu", "Hiển thị tên phía trên đầu mỗi người chơi", {
 		tick = function()
 			local me = game.player()
 			for slot = 0, SLOTS - 1 do
@@ -201,10 +201,10 @@ local function tags(menu: Menu)
 end
 
 function M.build(root: Menu)
-	local menu = root:submenu("Players", "The other players of a GTA Online session")
-	local list = menu:submenu("Who is here", "Go to, watch, give: one by one")
+	local menu = root:submenu("Người chơi", "Những người chơi khác trong phiên GTA Online")
+	local list = menu:submenu("Danh sách trong phòng", "Dịch chuyển, theo dõi, tặng đồ từng người")
 	tags(menu)
-	bind.feature(menu, "players.friendlyFire", "Friendly fire", "Hurt your friends and crew", {
+	bind.feature(menu, "players.friendlyFire", "Bắn đồng đội", "Cho phép gây sát thương lên bạn bè và bang hội", {
 		on = function()
 			network.networkSetFriendlyFireOption(true)
 			ped.setCanAttackFriendly(game.me(), true, false)
@@ -214,10 +214,10 @@ function M.build(root: Menu)
 			ped.setCanAttackFriendly(game.me(), false, false)
 		end,
 	})
-	list:onOpen(bind.safe("Players", function()
+	list:onOpen(bind.safe("Người chơi", function()
 		list:clear()
 		if not network.networkIsSessionStarted() then
-			list:label("Not in a GTA Online session.")
+			list:label("Bạn chưa ở trong phiên GTA Online.")
 			return
 		end
 		local me = game.player()
@@ -230,10 +230,10 @@ function M.build(root: Menu)
 			end
 		end
 		if count == 0 then
-			list:label("Nobody else is here.")
+			list:label("Chưa có người chơi nào khác ở đây.")
 		end
 		if watching then
-			bind.action(list, "Stop watching", { action = "Stop" }, function(): string?
+			bind.action(list, "Dừng theo dõi", { action = "Dừng" }, function(): string?
 				stopWatching()
 				return nil
 			end)

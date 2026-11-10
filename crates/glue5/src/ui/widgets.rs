@@ -1,6 +1,6 @@
-//! Shared rows and controls, sized from the space available rather than the platform.
+//! Thành phần điều khiển và hàng cài đặt kính tối dùng chung, co giãn theo không gian hiển thị.
 use super::TextKind;
-use super::theme::{INK, MUTED, density};
+use super::theme::{ACCENT, ACCENT_INK, BORDER, BORDER_STRONG, CARD, CARD_HOVER, CONTROL, MUTED, SURFACE, TEXT, density};
 use egui::*;
 
 pub(super) fn focus(r: Response) -> Response {
@@ -10,10 +10,7 @@ pub(super) fn focus(r: Response) -> Response {
     r
 }
 
-/// A field being edited stays in sight: while it has the focus and is not
-/// all inside the visible part of its scroll area (the page ended above the
-/// on-screen keyboard, ...), the area scrolls to it, frame after frame
-/// until it is (it follows the sheet as it shrinks).
+/// Giữ trường nhập đang được chọn luôn trong vùng nhìn thấy khi bàn phím ảo mở lên.
 pub(super) fn keep_in_view(ui: &Ui, focused: bool, rect: Rect) {
     if focused && !ui.clip_rect().contains_rect(rect) {
         ui.scroll_to_rect(rect, None);
@@ -25,15 +22,21 @@ pub(super) fn close_button(ui: &mut Ui) -> Response {
     let (r, response) = ui.allocate_exact_size(vec2(44.0 * scale, 44.0 * scale), Sense::click());
     response.widget_info(|| WidgetInfo::labeled(WidgetType::Button, ui.is_enabled(), "Đóng"));
     let c = r.center();
-    ui.painter().circle_filled(c, 18.0 * scale, Color32::from_gray(if response.hovered() { 60 } else { 32 }));
+    let fill = if response.hovered() { CARD_HOVER } else { CARD };
+    ui.painter().circle_filled(c, 18.0 * scale, fill);
+    ui.painter().circle_stroke(
+        c,
+        18.0 * scale,
+        Stroke::new(1.0, if response.hovered() { BORDER_STRONG } else { BORDER }),
+    );
     for sign in [-1.0, 1.0] {
         ui.painter().line_segment(
             [c + vec2(-5.0 * scale, -5.0 * scale * sign), c + vec2(5.0 * scale, 5.0 * scale * sign)],
-            Stroke::new(1.6, Color32::WHITE),
+            Stroke::new(1.8, TEXT),
         );
     }
     if response.has_focus() {
-        ui.painter().circle_stroke(c, 20.0 * scale, Stroke::new(1.0, Color32::WHITE));
+        ui.painter().circle_stroke(c, 20.5 * scale, Stroke::new(1.5, ACCENT));
     }
     focus(response).on_hover_text("Đóng")
 }
@@ -44,7 +47,7 @@ pub(super) enum Control {
     Choice,
     Toggle,
     Action,
-    /// A few buttons side by side (`action_buttons`).
+    /// Nhiều nút cạnh nhau (`action_buttons`).
     Actions,
 }
 
@@ -58,7 +61,8 @@ pub(super) fn setting<R>(
     let scale = density(ui);
     ui.push_id(label, |ui| {
         Frame::new()
-            .fill(Color32::from_gray(28))
+            .fill(CARD)
+            .stroke(Stroke::new(1.0, BORDER))
             .corner_radius((14.0 * scale) as u8)
             .inner_margin((12.0 * scale) as i8)
             .show(ui, |ui| {
@@ -67,7 +71,7 @@ pub(super) fn setting<R>(
                 let width = match kind {
                     Control::Slider => (available * 0.55).min(260.0 * scale),
                     Control::Choice => (available * 0.60).min(180.0 * scale),
-                    Control::Toggle => 44.0 * scale,
+                    Control::Toggle => 48.0 * scale,
                     Control::Action => (available * 0.55).min(180.0 * scale),
                     Control::Actions => (available * 0.62).min(320.0 * scale),
                 };
@@ -81,7 +85,7 @@ pub(super) fn setting<R>(
                         label,
                         14.0 * scale,
                         if subtitle.is_some() { -8.0 * scale } else { 0.0 },
-                        Color32::WHITE,
+                        TEXT,
                     );
                     if let Some(text) = subtitle {
                         paint_label(ui, rect, text, 11.0 * scale, 10.0 * scale, MUTED);
@@ -115,15 +119,13 @@ fn paint_label(ui: &Ui, rect: Rect, text: &str, size: f32, offset: f32, color: C
     ui.painter().galley(pos, galley, color);
 }
 
-/// A line of text in a field of its own, its name on the left (if any): the
-/// choice control's look. Anywhere on the field gives the text the focus.
-/// `kind` picks the system keyboard on touch screens, where an empty code or
-/// address field also offers to paste (their keyboard has no way to).
+/// Trường nhập văn bản một dòng với viền kính và tiêu điểm vàng.
 pub(super) fn text_field(ui: &mut Ui, label: &str, kind: TextKind, text: &mut String, hint: &str, max: usize) -> Response {
     let scale = density(ui);
     let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), 44.0 * scale), Sense::hover());
     let radius = 12.0 * scale;
-    ui.painter().rect_filled(rect, radius, Color32::from_gray(36));
+    ui.painter().rect_filled(rect, radius, SURFACE);
+    ui.painter().rect_stroke(rect, radius, Stroke::new(1.0, BORDER), StrokeKind::Inside);
     let field = ui.interact(rect, ui.id().with(label), Sense::click());
     let mut inner = rect.shrink2(vec2(14.0 * scale, 0.0));
     let label_width = if label.is_empty() { 0.0 } else { 52.0 * scale };
@@ -132,7 +134,7 @@ pub(super) fn text_field(ui: &mut Ui, label: &str, kind: TextKind, text: &mut St
         let paste = Rect::from_min_max(pos2(inner.right() - 56.0 * scale, rect.top()), pos2(rect.right(), rect.bottom()));
         let response = ui.interact(paste, ui.id().with((label, "paste")), Sense::click());
         response.widget_info(|| WidgetInfo::labeled(WidgetType::Button, ui.is_enabled(), "Dán"));
-        let color = if response.hovered() || response.has_focus() { Color32::WHITE } else { MUTED };
+        let color = if response.hovered() || response.has_focus() { ACCENT } else { MUTED };
         ui.painter().text(paste.center(), Align2::CENTER_CENTER, "Dán", FontId::proportional(13.0 * scale), color);
         if response.clicked()
             && let Some(pasted) = super::clipboard_text()
@@ -147,7 +149,7 @@ pub(super) fn text_field(ui: &mut Ui, label: &str, kind: TextKind, text: &mut St
             ui.add(
                 TextEdit::singleline(text)
                     .frame(Frame::NONE)
-                    .hint_text(RichText::new(hint).color(Color32::from_gray(100)))
+                    .hint_text(RichText::new(hint).color(Color32::from_rgb(92, 102, 124)))
                     .char_limit(max)
                     .font(FontId::proportional(15.0 * scale))
                     .margin(Vec2::ZERO)
@@ -159,20 +161,20 @@ pub(super) fn text_field(ui: &mut Ui, label: &str, kind: TextKind, text: &mut St
         edit.request_focus();
     }
     if edit.has_focus() {
-        ui.painter().rect_stroke(rect, radius, Stroke::new(1.5, Color32::WHITE), StrokeKind::Inside);
+        ui.painter().rect_stroke(rect, radius, Stroke::new(1.5, ACCENT), StrokeKind::Inside);
         ui.ctx().data_mut(|d| d.insert_temp(Id::new(super::TEXT_KIND), kind));
     }
     keep_in_view(ui, edit.has_focus(), rect);
     focus(edit)
 }
 
-/// Options side by side, the chosen one white (Settings' tabs, ...).
-/// Returns whether the value changed.
+/// Thanh chuyển tab dạng viên kính nổi, tab đang chọn nổi bật màu Vàng Champagne.
 pub(super) fn segmented<T: PartialEq + Copy>(ui: &mut Ui, value: &mut T, options: &[(T, &str)], height: f32) -> bool {
     let scale = density(ui);
     let previous = *value;
     Frame::new()
-        .fill(Color32::from_gray(24))
+        .fill(SURFACE)
+        .stroke(Stroke::new(1.0, BORDER))
         .corner_radius((16.0 * scale) as u8)
         .inner_margin((4.0 * scale) as i8)
         .show(ui, |ui| {
@@ -187,15 +189,21 @@ pub(super) fn segmented<T: PartialEq + Copy>(ui: &mut Ui, value: &mut T, options
                     response.widget_info(|| WidgetInfo::selected(WidgetType::Button, ui.is_enabled(), on, label));
                     let radius = 12.0 * scale;
                     let fill = match (on, response.hovered() || response.has_focus()) {
-                        (true, _) => Color32::WHITE,
-                        (false, true) => Color32::from_gray(44),
+                        (true, _) => ACCENT,
+                        (false, true) => CARD_HOVER,
                         (false, false) => Color32::TRANSPARENT,
                     };
                     ui.painter().rect_filled(rect, radius, fill);
                     let font = FontId::new(16.0 * scale, FontFamily::Name("condensed".into()));
-                    ui.painter().text(rect.center(), Align2::CENTER_CENTER, label, font, if on { INK } else { MUTED });
+                    ui.painter().text(
+                        rect.center(),
+                        Align2::CENTER_CENTER,
+                        label,
+                        font,
+                        if on { ACCENT_INK } else if response.hovered() { TEXT } else { MUTED },
+                    );
                     if response.has_focus() {
-                        ui.painter().rect_stroke(rect, radius, Stroke::new(1.5, Color32::WHITE), StrokeKind::Outside);
+                        ui.painter().rect_stroke(rect, radius, Stroke::new(1.5, ACCENT), StrokeKind::Outside);
                     }
                     if focus(response).clicked() {
                         *value = option;
@@ -210,14 +218,12 @@ pub(super) fn action_button(ui: &mut Ui, text: &str) -> Response {
     ui.with_layout(Layout::right_to_left(Align::Center), |ui| button(ui, text)).inner
 }
 
-/// The same button where the layout puts it (in a card's text, not a row's end).
+/// Nút nội tuyến đặt theo luồng bố cục văn bản / thẻ thông tin.
 pub(super) fn inline_button(ui: &mut Ui, text: &str) -> Response {
     button(ui, text)
 }
 
-/// Buttons side by side at the end of a row, in the order of `texts`:
-/// their responses in that order. (`action_button` twice would draw the
-/// second over the first.)
+/// Nhiều nút đặt cạnh nhau ở cuối hàng cài đặt.
 pub(super) fn action_buttons(ui: &mut Ui, texts: &[&str]) -> Vec<Response> {
     let mut responses = ui
         .with_layout(Layout::right_to_left(Align::Center), |ui| {
@@ -232,8 +238,10 @@ fn button(ui: &mut Ui, text: &str) -> Response {
     let scale = density(ui);
     focus(
         ui.add(
-            Button::new(RichText::new(text).size(13.0 * scale))
-                .corner_radius((10.0 * scale) as u8)
+            Button::new(RichText::new(text).size(13.0 * scale).color(TEXT))
+                .fill(CONTROL)
+                .stroke(Stroke::new(1.0, BORDER_STRONG))
+                .corner_radius((11.0 * scale) as u8)
                 .min_size(vec2(0.0, 40.0 * scale)),
         ),
     )
@@ -244,7 +252,8 @@ pub(super) fn choice<T: PartialEq + Copy>(ui: &mut Ui, value: &mut T, options: &
     let previous = *value;
     let index = options.iter().position(|(v, _)| v == value).unwrap_or(0);
     let mut response = Frame::new()
-        .fill(Color32::from_gray(36))
+        .fill(SURFACE)
+        .stroke(Stroke::new(1.0, BORDER))
         .corner_radius((12.0 * scale) as u8)
         .inner_margin((3.0 * scale) as i8)
         .show(ui, |ui| {
@@ -253,8 +262,9 @@ pub(super) fn choice<T: PartialEq + Copy>(ui: &mut Ui, value: &mut T, options: &
                 ui.spacing_mut().interact_size = vec2(38.0 * scale, 38.0 * scale);
                 let value_width = (ui.available_width() - 80.0 * scale).max(1.0);
                 let arrow = |text| {
-                    Button::new(text)
+                    Button::new(RichText::new(text).color(ACCENT))
                         .fill(Color32::TRANSPARENT)
+                        .stroke(Stroke::NONE)
                         .corner_radius((10.0 * scale) as u8)
                         .min_size(vec2(38.0 * scale, 38.0 * scale))
                 };
@@ -263,7 +273,7 @@ pub(super) fn choice<T: PartialEq + Copy>(ui: &mut Ui, value: &mut T, options: &
                     vec2(value_width, 38.0 * scale),
                     Layout::centered_and_justified(Direction::LeftToRight),
                     |ui| {
-                        ui.add(Label::new(RichText::new(options[index].1).size(13.0 * scale)).truncate());
+                        ui.add(Label::new(RichText::new(options[index].1).size(13.0 * scale).color(TEXT)).truncate());
                     },
                 );
                 let right = focus(ui.add(arrow("›"))).on_hover_text("Giá trị tiếp theo");
@@ -303,7 +313,7 @@ pub(super) fn slider(
             response.request_focus();
         }
         if let Some(pos) = response.interact_pointer_pos() {
-            let t = ((pos.x - r.left() - 5.0 * scale) / (r.width() - 10.0 * scale).max(1.0)).clamp(0.0, 1.0);
+            let t = ((pos.x - r.left() - 6.0 * scale) / (r.width() - 12.0 * scale).max(1.0)).clamp(0.0, 1.0);
             *value = ((start + t * (end - start)) / step as f32).round() * step as f32;
         }
         if response.has_focus() {
@@ -319,24 +329,26 @@ pub(super) fn slider(
         }
         response.widget_info(|| WidgetInfo::slider(ui.is_enabled(), *value as f64, ""));
         let rail = Rect::from_min_max(
-            pos2(r.left() + 5.0 * scale, r.center().y - 2.0 * scale),
-            pos2(r.right() - 5.0 * scale, r.center().y + 2.0 * scale),
+            pos2(r.left() + 6.0 * scale, r.center().y - 3.0 * scale),
+            pos2(r.right() - 6.0 * scale, r.center().y + 3.0 * scale),
         );
         let x = rail.left() + rail.width() * ((*value - start) / (end - start));
-        ui.painter().rect_filled(rail, 1, Color32::from_gray(68));
-        ui.painter().rect_filled(Rect::from_min_max(rail.min, pos2(x, rail.bottom())), 1, Color32::WHITE);
-        ui.painter().circle_filled(pos2(x, r.center().y), 5.0 * scale, Color32::WHITE);
+        ui.painter().rect_filled(rail, 3.0 * scale, CONTROL);
+        ui.painter().rect_filled(Rect::from_min_max(rail.min, pos2(x, rail.bottom())), 3.0 * scale, ACCENT);
+        let knob = pos2(x, r.center().y);
+        ui.painter().circle_filled(knob, 7.5 * scale, ACCENT);
+        ui.painter().circle_filled(knob, 3.5 * scale, TEXT);
         if response.has_focus() {
-            ui.painter().rect_stroke(r, 8, Stroke::new(1.0, Color32::WHITE), StrokeKind::Inside);
+            ui.painter().rect_stroke(r, 10, Stroke::new(1.5, ACCENT), StrokeKind::Inside);
         }
-        let (r, _) = ui.allocate_exact_size(vec2(46.0 * scale, 44.0 * scale), Sense::hover());
+        let (r, _) = ui.allocate_exact_size(vec2(48.0 * scale, 44.0 * scale), Sense::hover());
         let shown = if suffix == "%" { *value * 100.0 } else { *value };
         ui.painter().text(
             r.right_center(),
             Align2::RIGHT_CENTER,
             format!("{:.*}{}", decimals, shown, suffix),
-            FontId::proportional(14.0 * scale),
-            Color32::WHITE,
+            FontId::proportional(13.5 * scale),
+            ACCENT,
         );
         focus(response)
     })
@@ -345,25 +357,29 @@ pub(super) fn slider(
 
 pub(super) fn toggle(ui: &mut Ui, on: &mut bool) -> Response {
     let scale = density(ui);
-    let (r, mut response) = ui.allocate_exact_size(vec2(44.0 * scale, 44.0 * scale), Sense::click());
+    let (r, mut response) = ui.allocate_exact_size(vec2(48.0 * scale, 44.0 * scale), Sense::click());
     if response.clicked() {
         *on = !*on;
         response.mark_changed();
     }
     response.widget_info(|| WidgetInfo::selected(WidgetType::Checkbox, ui.is_enabled(), *on, ""));
     let t = ui.ctx().animate_bool_responsive(response.id, *on);
+    let track = Rect::from_center_size(r.center(), vec2(44.0 * scale, 25.0 * scale));
     ui.painter().rect_filled(
-        Rect::from_center_size(r.center(), vec2(40.0 * scale, 24.0 * scale)),
+        track,
         13.0 * scale,
-        if *on { Color32::WHITE } else { Color32::from_gray(65) },
+        if *on { ACCENT } else { CONTROL },
     );
+    if !*on {
+        ui.painter().rect_stroke(track, 13.0 * scale, Stroke::new(1.0, BORDER), StrokeKind::Inside);
+    }
     ui.painter().circle_filled(
-        pos2(egui::lerp((r.left() + 14.0 * scale)..=(r.right() - 14.0 * scale), t), r.center().y),
-        8.0 * scale,
-        if *on { INK } else { MUTED },
+        pos2(egui::lerp((track.left() + 12.5 * scale)..=(track.right() - 12.5 * scale), t), track.center().y),
+        9.0 * scale,
+        if *on { ACCENT_INK } else { TEXT },
     );
     if response.has_focus() {
-        ui.painter().rect_stroke(r, 14, Stroke::new(1.0, Color32::WHITE), StrokeKind::Inside);
+        ui.painter().rect_stroke(r, 14, Stroke::new(1.5, ACCENT), StrokeKind::Inside);
     }
     focus(response)
 }

@@ -1371,11 +1371,11 @@ pub fn check(server: &str, build: &str) -> Check {
     }
 }
 
-const NOT_A_SERVER: &str = "not a Glue 5 server";
+const NOT_A_SERVER: &str = "không phải máy chủ Mugoat Glue";
 
 /// The server's greeting, the first message on a connection.
 fn read_hello(reader: &mut impl Read) -> Result<serde_json::Value> {
-    let h = Header::read(reader).context("waiting for the server")?;
+    let h = Header::read(reader).context("đang chờ phản hồi từ máy chủ")?;
     if h.kind != HELLO {
         bail!(NOT_A_SERVER);
     }
@@ -1385,9 +1385,9 @@ fn read_hello(reader: &mut impl Read) -> Result<serde_json::Value> {
 /// Why a server with this greeting cannot serve an app running `build`.
 fn unusable(hello: &serde_json::Value, build: &str) -> Option<String> {
     if hello["protocol"].as_u64() != Some(PROTOCOL) {
-        Some(format!("the server speaks protocol {}, this app {PROTOCOL}", hello["protocol"]))
+        Some(format!("máy chủ dùng giao thức {}, ứng dụng dùng {PROTOCOL}", hello["protocol"]))
     } else if hello["build"].as_str() != Some(build) {
-        Some(format!("the server has game build {}, this app runs {build}", hello["build"].as_str().unwrap_or("?")))
+        Some(format!("máy chủ có bản game {}, ứng dụng chạy {build}", hello["build"].as_str().unwrap_or("?")))
     } else {
         None
     }
@@ -1403,10 +1403,10 @@ fn connect(server: &str) -> Result<(TcpStream, SocketAddr)> {
     for addr in addrs {
         match TcpStream::connect_timeout(&addr, Duration::from_secs(5)) {
             Ok(stream) => return Ok((stream, addr)),
-            Err(e) => last = Some(anyhow::Error::new(e).context(format!("connecting to {addr}"))),
+            Err(e) => last = Some(anyhow::Error::new(e).context(format!("không kết nối được tới {addr}"))),
         }
     }
-    Err(last.unwrap_or_else(|| anyhow::anyhow!("no address for {server}")))
+    Err(last.unwrap_or_else(|| anyhow::anyhow!("không tìm thấy địa chỉ cho {server}")))
 }
 
 /// `host`, `host:port`, `[v6]:port`.
@@ -1419,7 +1419,7 @@ fn resolve(server: &str) -> Result<Vec<SocketAddr>> {
     } else {
         format!("{server}:{PORT}")
     };
-    Ok(with_port.to_socket_addrs().with_context(|| format!("looking up {server}"))?.collect())
+    Ok(with_port.to_socket_addrs().with_context(|| format!("không phân giải được địa chỉ {server}"))?.collect())
 }
 
 /// The boot set (whale5's `bootset.json`: `[[path, [[first, last], …]], …]`

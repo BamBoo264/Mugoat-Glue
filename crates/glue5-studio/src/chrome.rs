@@ -58,12 +58,12 @@ pub(crate) fn TitleBar(s: S) -> impl IntoView {
     view! {
         <header class="titlebar">
             <div class="brand">
-                <img src="/logo.png" alt=""/><b>"GLUE 5"</b><span>"STUDIO"</span>
+                <img src="/logo.png" alt=""/><b>"MUGOAT GLUE"</b><span>"STUDIO"</span>
             </div>
             <div class="palette-wrap">
                 <label class="palette">
                     <span class="ico" inner_html=icons::SEARCH></span>
-                    <input node_ref=input placeholder="Search natives" spellcheck="false" autocomplete="off"
+                    <input node_ref=input placeholder="Tìm kiếm native" spellcheck="false" autocomplete="off"
                         prop:value=move || s.query.get()
                         on:focus=move |_| s.palette.set(true)
                         on:blur=move |_| set_timeout(move || s.palette.set(false), std::time::Duration::from_millis(200))
@@ -102,13 +102,13 @@ pub(crate) fn TitleBar(s: S) -> impl IntoView {
                 </Show>
             </div>
             <div class="tb-right">
-                <a class="btn ghost small" href="/control" target="_blank" rel="noopener" title="The mods and their menus, on a page of their own (for a phone too)">
-                    <span class="ico" inner_html=icons::SLIDERS></span>"Control page"
+                <a class="btn ghost small" href="/control" target="_blank" rel="noopener" title="Mở danh sách bản mod và menu ở trang riêng (tối ưu cho điện thoại)">
+                    <span class="ico" inner_html=icons::SLIDERS></span>"Trang điều khiển"
                 </a>
                 <div class=move || if s.connected.get() { "device" } else { "device off" }
-                    title=move || s.hello.with(|h| format!("The game runs on {}", h["device"].as_str().unwrap_or("this device")))>
+                    title=move || s.hello.with(|h| format!("Trò chơi đang chạy trên {}", h["device"].as_str().unwrap_or("thiết bị này")))>
                     <span class="dot"></span>
-                    <span class="name">{move || s.hello.with(|h| h["device"].as_str().unwrap_or("Game").to_string())}</span>
+                    <span class="name">{move || s.hello.with(|h| h["device"].as_str().unwrap_or("Trò chơi").to_string())}</span>
                 </div>
             </div>
         </header>
@@ -131,8 +131,8 @@ pub(crate) fn Activity(s: S) -> impl IntoView {
     };
     view! {
         <nav class="activity">
-            {item(Side::Mods, "Mods", icons::FOLDER)}
-            {item(Side::Natives, "Natives", icons::BOOK)}
+            {item(Side::Mods, "Bản mod", icons::FOLDER)}
+            {item(Side::Natives, "Hàm Native", icons::BOOK)}
         </nav>
     }
 }
@@ -143,13 +143,13 @@ pub(crate) fn StatusBar(s: S) -> impl IntoView {
     view! {
         <footer class="status">
             <span class="it"><span class=move || if s.connected.get() { "dot" } else { "dot off" }></span>
-                <b>{move || if s.connected.get() { "Connected" } else { "Offline" }}</b></span>
-            <span class="it hide-t">{move || s.hello.with(|h| format!("build {}", h["build"].as_str().unwrap_or("")))}</span>
+                <b>{move || if s.connected.get() { "Đã kết nối" } else { "Ngoại tuyến" }}</b></span>
+            <span class="it hide-t">{move || s.hello.with(|h| format!("bản dựng {}", h["build"].as_str().unwrap_or("")))}</span>
             <Show when=move || errors() != 0>
-                <span class="it errn" on:click=move |_| s.panel.set(Panel::Problems)>{move || format!("● {} error{}", errors(), if errors() == 1 { "" } else { "s" })}</span>
+                <span class="it errn" on:click=move |_| s.panel.set(Panel::Problems)>{move || format!("● {} lỗi", errors())}</span>
             </Show>
             <Show when=move || s.hello.with(|h| h["tainted"] == true)>
-                <span class="it errn">"A native failed: restart the game soon"</span>
+                <span class="it errn">"Một hàm native bị lỗi: hãy sớm khởi động lại trò chơi"</span>
             </Show>
             <span class="grow"></span>
             // The editor's, while it shows a file.
@@ -157,17 +157,17 @@ pub(crate) fn StatusBar(s: S) -> impl IntoView {
                 let language = match p.rsplit_once('.').map(|(_, e)| e) {
                     Some("luau") => "Luau",
                     Some("json") => "JSON",
-                    _ => "Plain Text",
+                    _ => "Văn bản thuần",
                 };
                 view! {
-                    <span class="it">{move || { let (l, c) = s.cursor.get(); format!("Ln {l}, Col {c}") }}</span>
+                    <span class="it">{move || { let (l, c) = s.cursor.get(); format!("Dòng {l}, Cột {c}") }}</span>
                     <span class="it hide-t">{language}</span>
                 }
             })}
             <span class="it">{move || {
                 let mods = s.mods.get();
                 let running: Vec<_> = mods.iter().filter(|m| m.state == "running").collect();
-                format!("{} running · {:.1} ms/frame", running.len(), running.iter().map(|m| m.cpu_ms).fold(0.0, |a, b| a + b))
+                format!("{} đang chạy · {:.1} ms/khung", running.len(), running.iter().map(|m| m.cpu_ms).fold(0.0, |a, b| a + b))
             }}</span>
         </footer>
     }
@@ -194,12 +194,12 @@ pub(crate) fn PhoneNav(s: S) -> impl IntoView {
     };
     view! {
         <nav class="phone-nav">
-            {item(Screen::Mods, "Mods", icons::FOLDER)}
-            {item(Screen::Editor, "Editor", icons::CODE)}
-            {item(Screen::Console, "Console", icons::TERMINAL)}
-            {item(Screen::Problems, "Problems", icons::WARNING)}
+            {item(Screen::Mods, "Mod", icons::FOLDER)}
+            {item(Screen::Editor, "Soạn mã", icons::CODE)}
+            {item(Screen::Console, "Bảng lệnh", icons::TERMINAL)}
+            {item(Screen::Problems, "Vấn đề", icons::WARNING)}
             <a class="phone-control" href="/control" target="_blank" rel="noopener">
-                <span class="ico" inner_html=icons::SLIDERS></span>"Control"
+                <span class="ico" inner_html=icons::SLIDERS></span>"Điều khiển"
             </a>
         </nav>
     }

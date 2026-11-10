@@ -12,40 +12,44 @@ use crate::sharing::State as Sharing;
 use glue5_stream::Phase;
 use egui::{Align, Align2, Color32, Id, Layout, Rect, RichText, Sense, Stroke, StrokeKind, UiBuilder, pos2, vec2};
 
-/// The only platform differences are capabilities, not layout.
+/// Sự khác biệt giữa nền tảng chỉ nằm ở khả năng hỗ trợ, không đổi bố cục.
 fn open_hint() -> &'static str {
     if TOUCH {
-        "Cài đặt: ⚙ hoặc Back + Start"
+        "Mở nhanh Cài đặt: nhấn nút ⚙ hoặc nhấn đồng thời Back + Start"
     } else if TV {
-        "Cài đặt: Back + Start"
+        "Mở nhanh Cài đặt: nhấn đồng thời Back + Start"
     } else {
-        "Cài đặt: F1 hoặc Back + Start"
+        "Mở nhanh Cài đặt: phím F1 hoặc tổ hợp Back + Start"
     }
 }
 
-/// The ways into the game, the start page's main column: a name and what
-/// it is.
+/// Các chế độ chơi chính trên cột trái của màn hình khởi động.
 const MODES: [(Mode, &str, &str); 4] = [
-    (Mode::Story, "CỐT TRUYỆN", "Tiếp tục câu chuyện của Michael, Franklin và Trevor từ bản lưu."),
-    (Mode::Online, "GTA ONLINE", "Chơi tự do với người khác, tự ghép phiên."),
-    (Mode::Sandbox, "CHƠI TỰ DO", "Tự do khám phá toàn bản đồ."),
-    (Mode::Benchmark, "ĐO HIỆU NĂNG", "Bay qua bản đồ để đo hiệu năng trên thiết bị này."),
+    (Mode::Story, "CỐT TRUYỆN", "Tiếp tục hành trình của Michael, Franklin và Trevor từ bản lưu."),
+    (Mode::Online, "GTA ONLINE", "Chơi trực tuyến cùng cộng đồng và bạn bè với ghép phiên tự động."),
+    (Mode::Sandbox, "CHƠI TỰ DO", "Tự do khám phá toàn thành phố Los Santos không giới hạn nhiệm vụ."),
+    (Mode::Benchmark, "ĐO HIỆU NĂNG", "Bay qua các khu vực nặng để kiểm tra FPS thực tế trên thiết bị."),
 ];
 
-/// A mode's card at least, and the title's row, in points at full density
-/// (to place the page before it is laid out).
-const MODE_HEIGHT: f32 = 66.0;
-const TITLE_HEIGHT: f32 = 58.0;
-const GAP: f32 = 8.0;
+/// Kích thước cơ sở của thẻ chế độ và thanh tiêu đề.
+const MODE_HEIGHT: f32 = 68.0;
+const TITLE_HEIGHT: f32 = 60.0;
+const GAP: f32 = 10.0;
 
-/// A status dot: the game's files are there.
-pub(super) const READY: Color32 = Color32::from_rgb(120, 205, 145);
+/// Màu chấm trạng thái sẵn sàng.
+pub(super) const READY: Color32 = Color32::from_rgb(86, 214, 146);
 
-/// The start page: the title with the app's own buttons, the game's modes
-/// and, quieter, what the app knows. Two columns where there is room, one
-/// on an upright phone. Returns the mode chosen, if one was. `starting`:
-/// the mode chosen at the last frame; `online_open`: GTA Online's card is
-/// open (its lobby and the player's name).
+fn mode_accent(mode: Mode) -> Color32 {
+    match mode {
+        Mode::Story => theme::ACCENT,
+        Mode::Online => theme::CYAN,
+        Mode::Sandbox => READY,
+        Mode::Benchmark => WARN,
+    }
+}
+
+/// Màn hình chính được thiết kế lại theo phong cách bảng điều khiển kính tối Obsidian-Gold:
+/// thanh thương hiệu + nút công cụ trên cùng, cột chế độ chơi bên trái và bảng trạng thái bên phải.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn start_page(
     ctx: &egui::Context,
@@ -60,15 +64,12 @@ pub(super) fn start_page(
     let scale = theme::layout_scale(safe);
     let edge = 16.0 * scale;
     let available = (safe.width() - 2.0 * edge).clamp(1.0, 1100.0).floor();
-    let gap = 32.0 * scale;
-    // Upright screens read better in one column: a phone, a tablet.
+    let gap = 28.0 * scale;
     let two_columns = available >= 600.0 * scale && safe.width() >= safe.height();
     let width = if two_columns { available } else { available.min(520.0) };
-    let menu_width = if two_columns { (420.0 * scale).min((width - gap) * 0.5).floor() } else { width };
-    // A little above the middle when there is room: the title and the
-    // modes (the other cards come and go), on one column all of it.
+    let menu_width = if two_columns { (432.0 * scale).min((width - gap) * 0.52).floor() } else { width };
     let modes = MODES.len() as f32 * (MODE_HEIGHT + GAP) * scale;
-    let content = (TITLE_HEIGHT + 20.0) * scale + modes + if two_columns { 0.0 } else { 160.0 * scale };
+    let content = (TITLE_HEIGHT + 22.0) * scale + modes + if two_columns { 0.0 } else { 160.0 * scale };
     let top = ((safe.height() - content) * 0.4).max(edge * 0.5).floor();
     let height = (safe.height() - top - edge * 0.5).max(1.0).floor();
     let mut chosen = None;
@@ -80,17 +81,11 @@ pub(super) fn start_page(
             theme::apply_density(ui, scale);
             ui.set_width(width);
             ui.set_height(height);
-            // The buttons go in last, so that the first move of a
-            // controller lands on the modes.
+            // Đưa các chế độ lên trước thanh nút để tay cầm chọn thẳng vào chế độ khi bấm Tab/D-pad.
             let (title_row, _) = ui.allocate_exact_size(vec2(width, TITLE_HEIGHT * scale), Sense::hover());
-            ui.painter().text(
-                title_row.left_center(),
-                Align2::LEFT_CENTER,
-                "MUGOAT GLUE",
-                egui::FontId::new(48.0 * scale, egui::FontFamily::Name("condensed".into())),
-                Color32::WHITE,
-            );
-            ui.add_space(20.0 * scale);
+            let labels = width >= 720.0 * scale;
+            draw_brand_lockup(ui, title_row, scale, !labels && width >= 480.0 * scale || width >= 840.0 * scale);
+            ui.add_space(18.0 * scale);
             let remaining = (ui.max_rect().bottom() - ui.cursor().top()).max(1.0).floor();
             if two_columns {
                 ui.horizontal_top(|ui| {
@@ -104,7 +99,6 @@ pub(super) fn start_page(
                 });
             } else {
                 column(ui, "home", width, remaining, |ui| {
-                    // Without the game's files, why first.
                     if status.game_dir.is_none() {
                         info(ui, settings, status, actions, go);
                         ui.add_space(8.0 * scale);
@@ -118,16 +112,14 @@ pub(super) fn start_page(
             }
             let labels = width >= 720.0 * scale;
             ui.scope_builder(UiBuilder::new().max_rect(title_row).layout(Layout::right_to_left(Align::Center)), |ui| {
-                ui.spacing_mut().item_spacing.x = 8.0 * scale;
+                ui.spacing_mut().item_spacing.x = 7.0 * scale;
                 if !MOBILE && icon_button(ui, "🗙", "Thoát", labels).clicked() {
                     actions.push(Action::Quit);
                 }
-                // Streamed (always, on the Apple TV), the files come from the
-                // Servers page.
                 let (icon, files) = match status.source {
                     Source::Server => ("🖧", "Máy chủ"),
                     Source::Folder if MOBILE => ("🗁", "Tìm tệp"),
-                    Source::Folder => ("🗁", "Thư mục trò chơi"),
+                    Source::Folder => ("🗁", "Thư mục game"),
                 };
                 if icon_button(ui, icon, files, labels).clicked() {
                     match status.source {
@@ -135,13 +127,12 @@ pub(super) fn start_page(
                         Source::Folder => actions.push(if MOBILE { Action::FindGame } else { Action::ChooseGame }),
                     }
                 }
-                if icon_button(ui, "★", "Thông tin dự án", labels).clicked() {
+                if icon_button(ui, "★", "Dự án", labels).clicked() {
                     *go = Some(Some(Page::Credits));
                 }
                 if icon_button(ui, "🛠", "Bản mod", labels).clicked() {
                     *go = Some(Some(Page::Mods));
                 }
-                // Asked to be friends: how many, on the button.
                 let friends = match status.friend_requests {
                     0 => "Bạn bè".to_owned(),
                     n => format!("Bạn bè ({n})"),
@@ -155,6 +146,42 @@ pub(super) fn start_page(
             });
         });
     chosen
+}
+
+/// Vẽ cụm logo huy hiệu Vàng Champagne + chữ MUGOAT GLUE ở góc trên bên trái.
+fn draw_brand_lockup(ui: &egui::Ui, row: Rect, scale: f32, show_badge: bool) {
+    let p = ui.painter();
+    let compact = row.width() < 460.0 * scale;
+    let badge_size = (if compact { 32.0 } else { 42.0 }) * scale;
+    let crest = Rect::from_min_size(pos2(row.left(), row.center().y - badge_size * 0.5), vec2(badge_size, badge_size));
+    p.rect_filled(crest, 10.0 * scale, theme::ACCENT);
+    p.rect_stroke(crest, 10.0 * scale, Stroke::new(1.2, Color32::from_white_alpha(120)), StrokeKind::Inside);
+    p.text(
+        crest.center(),
+        Align2::CENTER_CENTER,
+        "5",
+        egui::FontId::new((if compact { 21.0 } else { 28.0 }) * scale, egui::FontFamily::Name("condensed".into())),
+        theme::ACCENT_INK,
+    );
+    let title_x = crest.right() + (if compact { 8.0 } else { 12.0 }) * scale;
+    let title_pos = if show_badge { pos2(title_x, row.center().y - 7.0 * scale) } else { pos2(title_x, row.center().y) };
+    let title_size = (if compact { 24.0 } else { 34.0 }) * scale;
+    let title = p.layout_no_wrap(
+        "MUGOAT GLUE".into(),
+        egui::FontId::new(title_size, egui::FontFamily::Name("condensed".into())),
+        theme::TEXT,
+    );
+    p.galley(pos2(title_pos.x, title_pos.y - title.size().y * 0.5), title, theme::TEXT);
+    if show_badge {
+        let sub = format!("v{} · Việt hoá", env!("CARGO_PKG_VERSION"));
+        p.text(
+            pos2(title_x, row.center().y + 16.0 * scale),
+            Align2::LEFT_CENTER,
+            sub,
+            egui::FontId::proportional(11.0 * scale),
+            theme::ACCENT,
+        );
+    }
 }
 
 /// A column of the start page, scrolling if it has to.
@@ -188,9 +215,9 @@ fn mode_list(
     let mut chosen = None;
     for (mode, name, about) in MODES {
         let id = Id::new(("mode", name));
+        let accent = mode_accent(mode);
         let look = if mode == status.mode { Look::Primary } else { Look::Plain };
         let online = mode == Mode::Online;
-        // Fades the open card's controls in.
         let shown = if online { ui.ctx().animate_bool_responsive(id.with("open"), *open) } else { 0.0 };
         if going == Some(mode) {
             match status.preparing {
@@ -200,11 +227,12 @@ fn mode_list(
                     width,
                     &format!("ĐANG CHUẨN BỊ {:.0}%", done * 100.0),
                     "Đang biên dịch shader. Lần đầu có thể mất vài phút.",
+                    accent,
                     look,
                     None,
                     Some(done),
                 ),
-                None => mode_card(ui, id, width, "ĐANG MỞ…", about, look, None, None),
+                None => mode_card(ui, id, width, "ĐANG MỞ…", about, accent, look, None, None),
             };
         } else if online && *open {
             if online_card(ui, id, width, about, shown, settings, open) {
@@ -212,7 +240,7 @@ fn mode_list(
             }
         } else {
             let chevron = if online { Chevron::Opens } else { Chevron::Starts };
-            let card = ui.add_enabled_ui(ready, |ui| mode_card(ui, id, width, name, about, look, Some(chevron), None));
+            let card = ui.add_enabled_ui(ready, |ui| mode_card(ui, id, width, name, about, accent, look, Some(chevron), None));
             if card.inner.clicked() {
                 if online {
                     *open = true;
@@ -230,17 +258,16 @@ fn mode_list(
     chosen
 }
 
-/// How a mode's card looks.
+/// Kiểu hiển thị thẻ chế độ chơi.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Look {
     Plain,
-    /// White: the last one played.
+    /// Nền Vàng Champagne nổi bật: chế độ chơi gần nhất.
     Primary,
-    /// The open GTA Online card's top (the card draws the background).
+    /// Tiêu đề thẻ GTA Online đang mở rộng.
     Open,
 }
 
-/// What the card's chevron says: it starts the game, it opens, it closes.
 #[derive(Clone, Copy)]
 enum Chevron {
     Starts,
@@ -248,9 +275,6 @@ enum Chevron {
     Closes,
 }
 
-/// A mode: its name and what it is, a chevron, the whole card a button
-/// (without a chevron, it is on its way). `progress`: a bar along the
-/// bottom. `id` stays the same whatever the card says.
 #[allow(clippy::too_many_arguments)]
 fn mode_card(
     ui: &mut egui::Ui,
@@ -258,15 +282,18 @@ fn mode_card(
     width: f32,
     name: &str,
     about: &str,
+    accent: Color32,
     look: Look,
     chevron: Option<Chevron>,
     progress: Option<f32>,
 ) -> egui::Response {
     let scale = theme::density(ui);
-    let pad = vec2(20.0, 12.0) * scale;
-    let (ink, soft) =
-        if look == Look::Primary { (theme::INK, Color32::from_gray(92)) } else { (Color32::WHITE, theme::MUTED) };
-    let text_width = (width - 2.0 * pad.x - 24.0 * scale).max(1.0);
+    let pad = vec2(22.0, 12.0) * scale;
+    let (ink, soft) = match look {
+        Look::Primary => (theme::ACCENT_INK, Color32::from_rgb(72, 56, 22)),
+        Look::Plain | Look::Open => (theme::TEXT, theme::MUTED),
+    };
+    let text_width = (width - 2.0 * pad.x - 28.0 * scale).max(1.0);
     let galley = |text: egui::RichText, wrap| {
         egui::WidgetText::from(text).into_galley(ui, Some(wrap), text_width, egui::TextStyle::Body)
     };
@@ -280,33 +307,55 @@ fn mode_card(
     response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), name));
     let lit = interactive && (response.hovered() || response.has_focus());
     let fill = match (look, lit) {
-        (Look::Primary, false) => Color32::WHITE,
-        (Look::Primary, true) => Color32::from_gray(228),
-        (Look::Plain, false) => Color32::from_black_alpha(215),
-        (Look::Plain, true) => Color32::from_rgba_unmultiplied(40, 41, 45, 235),
+        (Look::Primary, false) => theme::ACCENT,
+        (Look::Primary, true) => Color32::from_rgb(252, 203, 108),
+        (Look::Plain, false) => Color32::from_rgba_unmultiplied(theme::CARD.r(), theme::CARD.g(), theme::CARD.b(), 236),
+        (Look::Plain, true) => theme::CARD_HOVER,
         (Look::Open, false) => Color32::TRANSPARENT,
-        (Look::Open, true) => Color32::from_white_alpha(8),
+        (Look::Open, true) => Color32::from_white_alpha(10),
     };
-    let radius = 18.0 * scale;
+    let radius = 16.0 * scale;
     let painter = ui.painter();
     painter.rect_filled(rect, radius, fill);
+    if look == Look::Plain {
+        painter.rect_stroke(
+            rect,
+            radius,
+            Stroke::new(1.0, if lit { accent.gamma_multiply(0.75) } else { theme::BORDER }),
+            StrokeKind::Inside,
+        );
+        // Dải nhấn màu bên cạnh trái giúp phân biệt từng chế độ chơi.
+        let bar = Rect::from_min_size(
+            pos2(rect.left() + 8.0 * scale, rect.top() + 13.0 * scale),
+            vec2(3.5 * scale, (rect.height() - 26.0 * scale).max(6.0)),
+        );
+        painter.rect_filled(bar, 2.0 * scale, accent);
+    } else if look == Look::Primary {
+        painter.rect_stroke(
+            rect,
+            radius,
+            Stroke::new(1.0, Color32::from_white_alpha(95)),
+            StrokeKind::Inside,
+        );
+    }
+    let text_left = rect.left() + pad.x + if look == Look::Plain { 4.0 * scale } else { 0.0 };
     let top = rect.center().y - text_height * 0.5;
-    painter.galley(pos2(rect.left() + pad.x, top), title.clone(), ink);
-    painter.galley(pos2(rect.left() + pad.x, top + title.size().y + 2.0 * scale), about, soft);
+    painter.galley(pos2(text_left, top), title.clone(), ink);
+    painter.galley(pos2(text_left, top + title.size().y + 2.0 * scale), about, soft);
     if let Some(chevron) = chevron.filter(|_| interactive) {
-        let at = pos2(rect.right() - pad.x - 4.0 * scale, rect.center().y);
+        let at = pos2(rect.right() - pad.x - 2.0 * scale, rect.center().y);
         let towards = match chevron {
             Chevron::Starts => vec2(1.0, 0.0),
             Chevron::Opens => vec2(0.0, 1.0),
             Chevron::Closes => vec2(0.0, -1.0),
         };
         let (side, depth) = (towards.rot90() * 6.0 * scale, towards * 3.5 * scale);
-        let stroke = Stroke::new(2.0 * scale, soft);
-        painter.add(egui::Shape::line(vec![at - depth + side, at + depth, at - depth - side], stroke));
+        let arrow_col = if look == Look::Primary { ink } else { accent };
+        painter.add(egui::Shape::line(vec![at - depth + side, at + depth, at - depth - side], Stroke::new(2.2 * scale, arrow_col)));
     }
     if let Some(done) = progress {
         let rail = Rect::from_min_max(
-            pos2(rect.left() + pad.x, rect.bottom() - 7.0 * scale),
+            pos2(text_left, rect.bottom() - 7.0 * scale),
             pos2(rect.right() - pad.x, rect.bottom() - 4.0 * scale),
         );
         painter.rect_filled(rail, 2.0 * scale, ink.gamma_multiply(0.2));
@@ -319,15 +368,14 @@ fn mode_card(
     focus(response)
 }
 
-/// Around a focused card or button, a little apart (white on white shows).
+/// Viền sáng vàng quanh thẻ hoặc nút đang được chọn bằng tay cầm/bàn phím.
 fn focus_ring(ui: &egui::Ui, rect: Rect, radius: f32) {
     let gap = 3.0 * theme::density(ui);
-    let stroke = Stroke::new(2.0, Color32::WHITE);
+    let stroke = Stroke::new(2.0, theme::ACCENT);
     ui.painter().rect_stroke(rect.expand(gap), radius + gap, stroke, StrokeKind::Outside);
 }
 
-/// GTA Online, open: the player's name, and Play, faded in by `shown`. Its
-/// top closes it (`open` false). True when Play is pressed.
+/// Thẻ GTA Online khi mở rộng: nhập tên nhân vật và nút vào game.
 fn online_card(
     ui: &mut egui::Ui,
     id: Id,
@@ -340,14 +388,14 @@ fn online_card(
     let scale = theme::density(ui);
     let mut play = false;
     let card = egui::Frame::new()
-        .fill(Color32::from_black_alpha(230))
-        .stroke(Stroke::new(1.0, Color32::from_gray(70)))
-        .corner_radius((18.0 * scale) as u8)
+        .fill(Color32::from_rgba_unmultiplied(theme::SURFACE.r(), theme::SURFACE.g(), theme::SURFACE.b(), 244))
+        .stroke(Stroke::new(1.2, theme::CYAN))
+        .corner_radius((16.0 * scale) as u8)
         .show(ui, |ui| {
             let width = width - 2.0;
             ui.set_width(width);
             ui.spacing_mut().item_spacing.y = 0.0;
-            if mode_card(ui, id, width, "GTA ONLINE", about, Look::Open, Some(Chevron::Closes), None).clicked() {
+            if mode_card(ui, id, width, "GTA ONLINE", about, theme::CYAN, Look::Open, Some(Chevron::Closes), None).clicked() {
                 *open = false;
             }
             ui.scope(|ui| {
@@ -362,23 +410,22 @@ fn online_card(
                     })
                     .show(ui, |ui| {
                         ui.spacing_mut().item_spacing.y = 10.0 * scale;
-                        let what = "Sessions with the players online, matched automatically; invite-only, friend \
-                                    and solo sessions from the game's pause menu, and your friends from ♡ Friends.";
+                        let what = "Phiên chơi trực tuyến tự động ghép người chơi; có thể tạo phiên mời riêng, \
+                                    bạn bè hoặc chơi đơn từ menu tạm dừng trong game và mục ♡ Bạn bè.";
                         ui.label(RichText::new(what).size(12.0 * scale).color(theme::MUTED));
                         text_field(ui, "Tên", TextKind::Name, &mut settings.online_name, "Người chơi", 16);
                         ui.add_space(2.0 * scale);
-                        play = play_button(ui, "CHƠI").clicked();
+                        play = play_button(ui, "VÀO GTA ONLINE").clicked();
                     });
             });
         });
-    // Just opened: all of it in view (a phone on its side scrolls).
     if ui.data_mut(|d| d.remove_temp::<bool>(id.with("reveal"))).is_some() {
         ui.scroll_to_rect(card.response.rect, None);
     }
     play
 }
 
-/// The white button that starts the game.
+/// Nút vào game màu Cyan điện cho GTA Online.
 fn play_button(ui: &mut egui::Ui, label: &str) -> egui::Response {
     let scale = theme::density(ui);
     let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), 50.0 * scale), Sense::hover());
@@ -387,25 +434,29 @@ fn play_button(ui: &mut egui::Ui, label: &str) -> egui::Response {
     let lit = response.hovered() || response.has_focus();
     let radius = 14.0 * scale;
     let painter = ui.painter();
-    painter.rect_filled(rect, radius, if lit { Color32::from_gray(228) } else { Color32::WHITE });
+    painter.rect_filled(
+        rect,
+        radius,
+        if lit { Color32::from_rgb(112, 229, 238) } else { theme::CYAN },
+    );
     let font = egui::FontId::new(20.0 * scale, egui::FontFamily::Name("condensed".into()));
-    painter.text(rect.center(), Align2::CENTER_CENTER, label, font, theme::INK);
+    painter.text(rect.center(), Align2::CENTER_CENTER, label, font, theme::ACCENT_INK);
     if response.has_focus() {
         focus_ring(ui, rect, radius);
     }
     focus(response)
 }
 
-/// The app's own buttons, small and half-transparent next to the modes:
-/// an icon, with its name where there is room.
+/// Nút công cụ kính mờ trên thanh tiêu đề chính.
 fn icon_button(ui: &mut egui::Ui, icon: &str, label: &str, with_label: bool) -> egui::Response {
     let scale = theme::density(ui);
     let size = (40.0 * scale).max(36.0);
     let text = if with_label { format!("{icon}  {label}") } else { icon.to_owned() };
     let button = egui::Button::new(
-        RichText::new(text).size(if with_label { 14.0 } else { 18.0 } * scale).color(Color32::from_white_alpha(220)),
+        RichText::new(text).size(if with_label { 13.5 } else { 17.5 } * scale).color(theme::TEXT),
     )
-    .fill(Color32::from_black_alpha(140))
+    .fill(Color32::from_rgba_unmultiplied(theme::CARD.r(), theme::CARD.g(), theme::CARD.b(), 220))
+    .stroke(Stroke::new(1.0, theme::BORDER))
     .min_size(vec2(size, size))
     .corner_radius((12.0 * scale) as u8);
     let response = focus(ui.add(button));
@@ -446,8 +497,9 @@ fn info(
 fn card<R>(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
     let scale = theme::density(ui);
     egui::Frame::new()
-        .fill(Color32::from_black_alpha(210))
-        .corner_radius((18.0 * scale) as u8)
+        .fill(Color32::from_rgba_unmultiplied(theme::SURFACE.r(), theme::SURFACE.g(), theme::SURFACE.b(), 230))
+        .stroke(Stroke::new(1.0, theme::BORDER))
+        .corner_radius((16.0 * scale) as u8)
         .inner_margin(egui::Margin::symmetric((20.0 * scale) as i8, (16.0 * scale) as i8))
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
@@ -457,29 +509,29 @@ fn card<R>(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
         .inner
 }
 
-/// A card's title, and on its right a status: a dot and a word.
+/// Tiêu đề thẻ kèm nhãn trạng thái kính nổi bên phải.
 pub(super) fn card_title(ui: &mut egui::Ui, title: &str, state: Option<(&str, Color32)>) {
     let scale = theme::density(ui);
     let (row, _) = ui.allocate_exact_size(vec2(ui.available_width(), 24.0 * scale), Sense::hover());
     let painter = ui.painter();
     let mut title_width = row.width();
     if let Some((word, color)) = state {
-        let text = painter.layout_no_wrap(word.into(), egui::FontId::proportional(11.0 * scale), Color32::WHITE);
+        let text = painter.layout_no_wrap(word.into(), egui::FontId::proportional(11.0 * scale), theme::TEXT);
         let pill = Rect::from_min_max(
             pos2(row.right() - text.size().x - 28.0 * scale, row.center().y - 11.0 * scale),
             pos2(row.right(), row.center().y + 11.0 * scale),
         );
         title_width = pill.left() - row.left() - 8.0 * scale;
-        painter.rect_filled(pill, 11.0 * scale, Color32::from_gray(42));
+        painter.rect_filled(pill, 11.0 * scale, theme::CARD);
+        painter.rect_stroke(pill, 11.0 * scale, Stroke::new(1.0, color.gamma_multiply(0.55)), StrokeKind::Inside);
         painter.circle_filled(pos2(pill.left() + 11.0 * scale, pill.center().y), 3.5 * scale, color);
-        painter.galley(pos2(pill.left() + 19.0 * scale, pill.center().y - text.size().y * 0.5), text, Color32::WHITE);
+        painter.galley(pos2(pill.left() + 19.0 * scale, pill.center().y - text.size().y * 0.5), text, theme::TEXT);
     }
-    // A long title (a computer's name) ends with … before the pill.
     let font = egui::FontId::new(17.0 * scale, egui::FontFamily::Name("condensed".into()));
-    let mut job = egui::text::LayoutJob::simple_singleline(title.into(), font, Color32::WHITE);
+    let mut job = egui::text::LayoutJob::simple_singleline(title.into(), font, theme::TEXT);
     job.wrap = egui::text::TextWrapping::truncate_at_width(title_width.max(1.0));
     let galley = painter.layout_job(job);
-    painter.galley(pos2(row.left(), row.center().y - galley.size().y * 0.5), galley, Color32::WHITE);
+    painter.galley(pos2(row.left(), row.center().y - galley.size().y * 0.5), galley, theme::TEXT);
 }
 
 fn game_files(ui: &mut egui::Ui, settings: &mut Settings, status: &Status, go: &mut Option<Option<Page>>) {
@@ -512,10 +564,10 @@ pub(super) fn small(ui: &mut egui::Ui, text: &str, color: Color32) {
 /// A thin bar: how far something is (0 to 1).
 pub(super) fn rail(ui: &mut egui::Ui, done: f32) {
     let scale = theme::density(ui);
-    let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), 4.0 * scale), Sense::hover());
-    ui.painter().rect_filled(rect, 2.0 * scale, Color32::from_gray(60));
+    let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), 5.0 * scale), Sense::hover());
+    ui.painter().rect_filled(rect, 2.5 * scale, theme::CONTROL);
     let filled = Rect::from_min_size(rect.min, vec2(rect.width() * done.clamp(0.0, 1.0), rect.height()));
-    ui.painter().rect_filled(filled, 2.0 * scale, Color32::WHITE);
+    ui.painter().rect_filled(filled, 2.5 * scale, theme::ACCENT);
 }
 
 pub(super) fn bytes(n: u64) -> String {
@@ -657,10 +709,10 @@ fn graphics_reset_note() -> RichText {
 fn last_benchmark(ui: &mut egui::Ui, results: &crate::benchmark::Results) {
     let scale = theme::density(ui);
     card_title(ui, "LẦN ĐO GẦN NHẤT", None);
-    ui.label(theme::heading(&format!("{:.0} FPS", results.avg_fps), 34.0 * scale));
+    ui.label(theme::heading(&format!("{:.0} FPS", results.avg_fps), 34.0 * scale).color(theme::ACCENT));
     ui.label(
         RichText::new(format!(
-            "FPS trung bình; thấp nhất {:.0}, {:.0}% khung hình dưới 33 ms.",
+            "FPS trung bình · thấp nhất {:.0} · {:.0}% khung hình mượt (<33 ms)",
             results.min_fps,
             results.smooth * 100.0
         ))
@@ -740,12 +792,23 @@ pub(super) fn sheet(ctx: &egui::Context, id: &str, title: &str, add: impl FnOnce
                 })
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
-                        ui.label(theme::heading(title, 28.0 * scale));
+                        let (bar, _) = ui.allocate_exact_size(vec2(4.0 * scale, 22.0 * scale), Sense::hover());
+                        ui.painter().rect_filled(bar, 2.0 * scale, theme::ACCENT);
+                        ui.label(theme::heading(title, 26.0 * scale).color(theme::TEXT));
                         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                             close = close_button(ui).clicked();
                         });
                     });
                 });
+            let rect = ui.max_rect();
+            let bar_y = ui.min_rect().bottom();
+            if rect.width() > padding as f32 * 2.0 {
+                ui.painter().hline(
+                    (rect.left() + padding as f32)..=(rect.right() - padding as f32),
+                    bar_y,
+                    Stroke::new(1.0, theme::BORDER),
+                );
+            }
             let height = (size.y - ui.min_rect().height()).max(1.0);
             egui::ScrollArea::vertical()
                 .content_margin(0)
@@ -901,8 +964,8 @@ fn settings_items(
                 )
             })
             .on_hover_text(
-                "Lock-on: aiming locks on to the nearest target and follows it. Snap: aiming snaps to the target, \
-                 then you aim. Slow-down: the camera slows down over targets. Off: free aim",
+                "Khóa mục tiêu: tự khóa và bám theo mục tiêu gần nhất. Bám nhanh: kéo tâm ngắm về mục tiêu \
+                 rồi tự tinh chỉnh. Giảm tốc: làm chậm góc quay khi tâm đi qua mục tiêu. Tắt: ngắm tự do hoàn toàn.",
             );
             if crate::haptics::SUPPORTED {
                 setting(ui, "Phản hồi rung", Control::Toggle, None, |ui| toggle(ui, &mut settings.haptics));
@@ -1221,7 +1284,7 @@ mod tests {
                     .shapes
                     .iter()
                     .filter_map(|s| match &s.shape {
-                        egui::Shape::Rect(r) if r.fill == egui::Color32::from_gray(28) => Some((r.rect, s.clip_rect)),
+                        egui::Shape::Rect(r) if r.fill == theme::CARD => Some((r.rect, s.clip_rect)),
                         _ => None,
                     })
                     .collect();

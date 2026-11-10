@@ -99,7 +99,7 @@ function M.feature(menu: Menu, key: string, label: string, note: string?, f: Fea
 					if f.off then
 						pcall(f.off)
 					end
-					ui.notify(`{label} stopped: {message}`)
+					ui.notify(`{label} đã dừng: {message}`)
 				end)
 			end
 		else
@@ -122,7 +122,7 @@ function M.feature(menu: Menu, key: string, label: string, note: string?, f: Fea
 	end
 	keys.action(key, label, M.safe(label, function()
 		set(not M.on(key))
-		game.notify(`{label}: {if M.on(key) then "on" else "off"}`)
+		game.notify(`{label}: {if M.on(key) then "bật" else "tắt"}`)
 	end))
 	return item, set
 end
@@ -134,7 +134,7 @@ function M.storyOnly(f: Feature): Feature
 	return {
 		on = function()
 			if game.online() then
-				error("story mode only: in GTA Online the others would not see what it makes", 0)
+				error("chỉ dùng trong chế độ cốt truyện: trong GTA Online người khác không thấy vật thể bạn tạo", 0)
 			end
 			if f.on then
 				f.on()
@@ -187,7 +187,7 @@ function M.mirror(menu: Menu, e: Entry): Item
 		table.insert(mirrored[menu.id], { key = e.key, item = item })
 		return item
 	end
-	return menu:button(e.label, { note = e.place, action = "Run" }, e.run)
+	return menu:button(e.label, { note = e.place, action = "Chạy" }, e.run)
 end
 
 -- The toggles mirrored in `menu` stop following their features.

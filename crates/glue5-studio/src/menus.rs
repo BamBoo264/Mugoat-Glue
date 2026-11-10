@@ -188,8 +188,8 @@ fn MenuCard(s: S, root: u32, module: String) -> impl IntoView {
             }
             let last = names.len() - 1;
             view! {
-                <button class="mback" title="Back" aria-label="Back" on:click=move |_| pop.run(())>"‹"</button>
-                <nav class="mcrumbs" aria-label="Where">
+                <button class="mback" title="Quay lại" aria-label="Quay lại" on:click=move |_| pop.run(())>"‹"</button>
+                <nav class="mcrumbs" aria-label="Vị trí">
                     {names.into_iter().enumerate().map(|(n, name)| {
                         let sep = (n > 0).then(|| view! { <i aria-hidden="true">"›"</i> });
                         if n == last {
@@ -263,7 +263,7 @@ fn MenuBody(s: S, module: String, menu: u32, push: Callback<Level>, queries: RwS
     view! {
         <Show when=move || searches.get()>
             <div class="mpick-bar">
-                <input type="search" class="msearch" placeholder="Search" aria-label="Search the menu" spellcheck="false"
+                <input type="search" class="msearch" placeholder="Tìm kiếm" aria-label="Tìm kiếm trong menu" spellcheck="false"
                     prop:value=move || queries.with(|q| q.get(&menu).cloned().unwrap_or_default())
                     on:input=move |ev| queries.update(|q| {
                         q.insert(menu, event_target_value(&ev));
@@ -271,7 +271,7 @@ fn MenuBody(s: S, module: String, menu: u32, push: Callback<Level>, queries: RwS
             </div>
         </Show>
         <Show when=move || rows.with(Vec::is_empty)>
-            <p class="mempty">{move || if query.with(String::is_empty) { "Nothing in it yet" } else { "Nothing here has that" }}</p>
+            <p class="mempty">{move || if query.with(String::is_empty) { "Chưa có mục nào" } else { "Không tìm thấy mục phù hợp" }}</p>
         </Show>
         <For each=move || rows.get() key=|r| *r let((id, _))>
             <rows::Row s=s module=module.clone() menu=menu id=id push=push/>

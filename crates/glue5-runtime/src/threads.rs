@@ -90,7 +90,7 @@ fn run_main() -> i32 {
             }
         }
         Err(trap) => {
-            crate::exit::fail(format!("the engine's main thread stopped ({trap})"));
+            crate::exit::fail(format!("luồng chính của engine đã dừng ({trap})"));
             1
         }
     }
@@ -119,7 +119,7 @@ pub(crate) unsafe fn init_main_thread(env: *mut Env, pthread: u64) {
     };
     // (Called by the engine: a panic would abort, with no message.)
     if let Err(trap) = init {
-        crate::exit::fail(format!("the engine's main thread could not start ({trap})"));
+        crate::exit::fail(format!("không thể khởi động luồng chính của engine ({trap})"));
         loop {
             std::thread::park();
         }
@@ -220,7 +220,7 @@ fn run_pthread(pthread: u64, start: u64, arg: u64, qos: Qos) {
         }
         Err(trap) => {
             log::error!("thread {pthread:#x}: {trap}");
-            crate::exit::fail(format!("an engine thread stopped ({trap})"));
+            crate::exit::fail(format!("một luồng của engine đã dừng ({trap})"));
             let _ = unsafe { exports::_emscripten_thread_crashed(env) };
         }
     }
