@@ -207,7 +207,7 @@ mod tests {
         let line = b"Fatal Error: <HDD Reader> Short read on /game/x.rpf - got -1\n";
         assert_eq!(
             fatal_error(line).as_deref(),
-            Some("the engine failed: <HDD Reader> Short read on /game/x.rpf - got -1")
+            Some("engine gặp lỗi: <HDD Reader> Short read on /game/x.rpf - got -1")
         );
         assert_eq!(fatal_error(b"Error: something else\n"), None);
     }

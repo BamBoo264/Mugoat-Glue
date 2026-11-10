@@ -133,7 +133,7 @@ jobs:
 
       - name: Test
         if: inputs.platform == 'ios' || inputs.platform == 'macos' || inputs.platform == 'windows'
-        run: mise run test -- -p glue5-runtime -p glue5 --lib
+        run: mise run test -- --lib
 
       - name: Build
         run: |
