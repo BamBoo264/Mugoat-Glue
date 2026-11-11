@@ -1,8 +1,8 @@
 //! D3D11 (DXGI) formats and enums to wgpu.
 
 use wgpu::{
-    AddressMode, BlendFactor, BlendOperation, CompareFunction, Features, PrimitiveTopology, StencilOperation,
-    TextureFormat as F, VertexFormat as V,
+    AddressMode, AstcBlock, AstcChannel, BlendFactor, BlendOperation, CompareFunction, Features, PrimitiveTopology,
+    StencilOperation, TextureFormat as F, VertexFormat as V,
 };
 
 pub const BIND_VERTEX: u32 = 0x1;
@@ -104,21 +104,29 @@ const fn twin(format: F, view: F) -> TexFormat {
 pub fn texture(dxgi: u32, depth: bool, caps: &Caps) -> TexFormat {
     let tf = native_texture(dxgi, depth, caps);
     if tf.format.is_compressed() && !caps.features.contains(Features::TEXTURE_COMPRESSION_BC) {
-        return decoded(tf, caps.features.contains(Features::TEXTURE_COMPRESSION_ETC2));
+        return decoded(
+            tf,
+            caps.features.contains(Features::TEXTURE_COMPRESSION_ETC2),
+            caps.features.contains(Features::TEXTURE_COMPRESSION_ASTC),
+        );
     }
     tf
 }
 
-/// The format BCn data is decoded to: uncompressed, or for colour, ETC2
-/// where the GPU has it (re-encoded, a quarter of the memory; see bc.rs).
-fn decoded(tf: TexFormat, etc2: bool) -> TexFormat {
+/// The format BCn data is decoded or transcoded to on GPUs without native BC:
+/// ASTC 4x4 directly for BC1/BC3 when available (fast bit-transcode, no RGBA
+/// intermediate), ETC2 RGBA8 for BC2/BC7 (or BC1/BC3 without ASTC), and
+/// uncompressed formats otherwise.
+pub(crate) fn decoded(tf: TexFormat, etc2: bool, astc: bool) -> TexFormat {
+    let astc_unorm = F::Astc { block: AstcBlock::B4x4, channel: AstcChannel::Unorm };
+    let astc_srgb = F::Astc { block: AstcBlock::B4x4, channel: AstcChannel::UnormSrgb };
     let (bc, format) = match tf.format {
-        F::Bc1RgbaUnorm => (Bc::Bc1, F::Rgba8Unorm),
-        F::Bc1RgbaUnormSrgb => (Bc::Bc1, F::Rgba8UnormSrgb),
+        F::Bc1RgbaUnorm => (Bc::Bc1, if astc { astc_unorm } else { F::Rgba8Unorm }),
+        F::Bc1RgbaUnormSrgb => (Bc::Bc1, if astc { astc_srgb } else { F::Rgba8UnormSrgb }),
         F::Bc2RgbaUnorm => (Bc::Bc2, F::Rgba8Unorm),
         F::Bc2RgbaUnormSrgb => (Bc::Bc2, F::Rgba8UnormSrgb),
-        F::Bc3RgbaUnorm => (Bc::Bc3, F::Rgba8Unorm),
-        F::Bc3RgbaUnormSrgb => (Bc::Bc3, F::Rgba8UnormSrgb),
+        F::Bc3RgbaUnorm => (Bc::Bc3, if astc { astc_unorm } else { F::Rgba8Unorm }),
+        F::Bc3RgbaUnormSrgb => (Bc::Bc3, if astc { astc_srgb } else { F::Rgba8UnormSrgb }),
         F::Bc7RgbaUnorm => (Bc::Bc7, F::Rgba8Unorm),
         F::Bc7RgbaUnormSrgb => (Bc::Bc7, F::Rgba8UnormSrgb),
         F::Bc4RUnorm => (Bc::Bc4, F::R8Unorm),
@@ -136,12 +144,12 @@ fn decoded(tf: TexFormat, etc2: bool) -> TexFormat {
 }
 
 impl TexFormat {
-    /// For BCn data re-encoded as ETC2: decoded only (for sizes ETC2 cannot
-    /// take, see `create_texture`).
+    /// For BCn data re-encoded as ASTC/ETC2: decoded only (for sizes compressed
+    /// targets cannot take, see `create_texture`).
     pub fn uncompressed(self) -> TexFormat {
         let swap = |f: F| match f {
-            F::Etc2Rgba8Unorm => F::Rgba8Unorm,
-            F::Etc2Rgba8UnormSrgb => F::Rgba8UnormSrgb,
+            F::Etc2Rgba8Unorm | F::Astc { channel: AstcChannel::Unorm, .. } => F::Rgba8Unorm,
+            F::Etc2Rgba8UnormSrgb | F::Astc { channel: AstcChannel::UnormSrgb, .. } => F::Rgba8UnormSrgb,
             f => f,
         };
         TexFormat { format: swap(self.format), view: self.view.map(swap), upload: self.upload }
@@ -412,4 +420,40 @@ pub fn storage(name: &str) -> Option<F> {
 /// The WGSL name of a storage format (for rewriting declarations).
 pub fn wgsl_storage_name(f: F) -> Option<&'static str> {
     NAMES.iter().find(|(x, _)| *x == f).map(|(_, n)| *n).filter(|n| !n.contains('-') && !n.starts_with("depth"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn decoded_prefers_astc_for_bc1_bc3_and_falls_back_cleanly() {
+        let bc1_srgb = TexFormat {
+            format: F::Bc1RgbaUnormSrgb,
+            view: Some(F::Bc1RgbaUnorm),
+            upload: Upload::Direct,
+        };
+        let bc3 = TexFormat { format: F::Bc3RgbaUnorm, view: Some(F::Bc3RgbaUnormSrgb), upload: Upload::Direct };
+        let bc7 = TexFormat { format: F::Bc7RgbaUnorm, view: Some(F::Bc7RgbaUnormSrgb), upload: Upload::Direct };
+
+        let got_bc1 = decoded(bc1_srgb, true, true);
+        assert_eq!(got_bc1.format, F::Astc { block: AstcBlock::B4x4, channel: AstcChannel::UnormSrgb });
+        assert_eq!(got_bc1.view, Some(F::Astc { block: AstcBlock::B4x4, channel: AstcChannel::Unorm }));
+        assert_eq!(got_bc1.upload, Upload::Bc(Bc::Bc1));
+        assert_eq!(got_bc1.uncompressed().format, F::Rgba8UnormSrgb);
+        assert_eq!(got_bc1.uncompressed().view, Some(F::Rgba8Unorm));
+
+        let got_bc3_no_astc = decoded(bc3, true, false);
+        assert_eq!(got_bc3_no_astc.format, F::Etc2Rgba8Unorm);
+        assert_eq!(got_bc3_no_astc.view, Some(F::Etc2Rgba8UnormSrgb));
+        assert_eq!(got_bc3_no_astc.uncompressed().format, F::Rgba8Unorm);
+
+        let got_bc7 = decoded(bc7, true, true);
+        assert_eq!(got_bc7.format, F::Etc2Rgba8Unorm);
+        assert_eq!(got_bc7.view, Some(F::Etc2Rgba8UnormSrgb));
+
+        let got_plain = decoded(bc3, false, false);
+        assert_eq!(got_plain.format, F::Rgba8Unorm);
+        assert_eq!(got_plain.view, Some(F::Rgba8UnormSrgb));
+    }
 }

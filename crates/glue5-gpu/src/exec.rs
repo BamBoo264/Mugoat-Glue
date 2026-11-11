@@ -691,7 +691,7 @@ impl Gpu {
             crate::log_once("nobc", || {
                 format!(
                     "the device has no BC texture compression: decoding BC textures on the CPU{}",
-                    if tf.format.is_compressed() { " (colour re-encoded as ETC2)" } else { "" }
+                    if tf.format.is_compressed() { " (re-encoded as ASTC/ETC2)" } else { "" }
                 )
             });
         }
@@ -997,16 +997,15 @@ impl Gpu {
         let origin = wgpu::Origin3d { x, y, z: if t.is_3d() { z } else { slice } };
         let d = d.max(1);
         if let Upload::Bc(bc) = t.upload {
-            // Decoded by a thread of its own while recording goes on, copied
-            // in at the flush. Re-encoded as ETC2 (a compressed format) the
-            // data is whole blocks, as BC data; decoded texels are cropped to
-            // the mip (block-padded regions may overhang it).
-            let etc2 = t.format.is_compressed();
+            // Re-encoded as ASTC 4x4 (fast direct bit-transcode for BC1/BC3)
+            // or strip-decoded ETC2 RGBA8, or decoded uncompressed strip-by-strip.
+            let compressed = t.format.is_compressed();
+            let astc = matches!(t.format, TextureFormat::Astc { .. });
             let (cols, block_rows) = (w.div_ceil(4), h.div_ceil(4));
             let src_rows = rows.max(block_rows) as usize;
             // Bytes per data row, data rows per layer, rows and texels to copy, bytes per copied row.
-            let (data_bpr, data_rows, copy_rows, (cw, ch), row_bytes) = if etc2 {
-                let row = cols * crate::bc::ETC2_RGBA_BLOCK_BYTES;
+            let (data_bpr, data_rows, copy_rows, (cw, ch), row_bytes) = if compressed {
+                let row = cols * crate::bc::COMPRESSED_4X4_BLOCK_BYTES;
                 (row, block_rows, block_rows, (cols * 4, block_rows * 4), row)
             } else {
                 let texel = bc.texel_bytes() as u32;
@@ -1024,11 +1023,40 @@ impl Gpu {
                     return (Vec::new(), 0);
                 }
                 let t0 = Instant::now();
-                let texels = crate::bc::decode(bc, &src, bpr, src_rows, cols as usize, block_rows as usize, d as usize);
-                if cancel_job.load(Ordering::Acquire) {
-                    return (Vec::new(), t0.elapsed().as_micros() as u64);
-                }
-                let out = if etc2 { crate::bc::etc2_rgba(texels, cols * 4, block_rows * 4 * d) } else { texels };
+                let out = if astc {
+                    crate::bc::transcode_astc(
+                        bc,
+                        &src,
+                        bpr,
+                        src_rows,
+                        cols as usize,
+                        block_rows as usize,
+                        d as usize,
+                        &cancel_job,
+                    )
+                } else if compressed {
+                    crate::bc::decode_to_etc2_rgba(
+                        bc,
+                        &src,
+                        bpr,
+                        src_rows,
+                        cols as usize,
+                        block_rows as usize,
+                        d as usize,
+                        &cancel_job,
+                    )
+                } else {
+                    crate::bc::decode_cancellable(
+                        bc,
+                        &src,
+                        bpr,
+                        src_rows,
+                        cols as usize,
+                        block_rows as usize,
+                        d as usize,
+                        &cancel_job,
+                    )
+                };
                 (out, t0.elapsed().as_micros() as u64)
             });
             let bytes_est = row_bytes as u64 * copy_rows as u64 * d as u64;
@@ -1081,11 +1109,18 @@ impl Gpu {
             }
             Upload::A8 => {
                 let mut out = vec![0u8; (w * h * d * 4) as usize];
-                for layer in 0..d {
-                    for r in 0..h {
-                        for col in 0..w {
-                            let src = (layer * rows.max(h) * bpr + r * bpr + col) as usize;
-                            out[((layer * h + r) * w + col) as usize * 4 + 3] = data.get(src).copied().unwrap_or(0);
+                let layer_rows = rows.max(h) as usize;
+                let bpr = bpr as usize;
+                let w_us = w as usize;
+                let h_us = h as usize;
+                for layer in 0..d as usize {
+                    for r in 0..h_us {
+                        let src = layer * layer_rows * bpr + r * bpr;
+                        let line = data.get(src..).unwrap_or_default();
+                        let dst_row = &mut out[(layer * h_us + r) * w_us * 4..(layer * h_us + r + 1) * w_us * 4];
+                        let n = w_us.min(line.len());
+                        for (dst_px, &a) in dst_row.chunks_exact_mut(4).zip(&line[..n]) {
+                            dst_px[3] = a;
                         }
                     }
                 }
@@ -1094,14 +1129,20 @@ impl Gpu {
             }
             Upload::Unorm16 => {
                 let row = w * format::block(t.format).0;
-                let mut out = Vec::with_capacity((row * h * d) as usize);
-                for layer in 0..d {
-                    for r in 0..h {
-                        let src = (layer * rows.max(h) * bpr + r * bpr) as usize;
+                let row_us = row as usize;
+                let h_us = h as usize;
+                let layer_rows = rows.max(h) as usize;
+                let bpr = bpr as usize;
+                let mut out = vec![0u8; row_us * h_us * d as usize];
+                for layer in 0..d as usize {
+                    for r in 0..h_us {
+                        let src = layer * layer_rows * bpr + r * bpr;
                         let line = data.get(src..).unwrap_or_default();
-                        for i in 0..row as usize / 2 {
-                            let v = line.get(2 * i..2 * i + 2).map_or(0, |b| u16::from_le_bytes([b[0], b[1]]));
-                            out.extend_from_slice(&half::f16::from_f32(f32::from(v) / 65535.0).to_le_bytes());
+                        let dst_row = &mut out[(layer * h_us + r) * row_us..(layer * h_us + r + 1) * row_us];
+                        let pairs = (row_us / 2).min(line.len() / 2);
+                        for (dst_px, src_px) in dst_row.chunks_exact_mut(2).zip(line[..pairs * 2].chunks_exact(2)) {
+                            let v = u16::from_le_bytes([src_px[0], src_px[1]]);
+                            dst_px.copy_from_slice(&half::f16::from_f32(f32::from(v) * (1.0 / 65535.0)).to_le_bytes());
                         }
                     }
                 }
