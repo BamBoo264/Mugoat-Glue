@@ -19,6 +19,15 @@ pub const CHUNK: u64 = 1 << 20;
 /// once, play few, and memory is scarce on phones.
 const KEEP: u64 = 32 << 20;
 
+fn staging_keep_limit() -> u64 {
+    use glue5_runtime::memory::{GuardPressure, MemoryProfile, pressure_level};
+    match pressure_level() {
+        GuardPressure::Critical => 0,
+        GuardPressure::High => 8 << 20,
+        _ => MemoryProfile::detect().staging_keep_bytes.min(KEEP),
+    }
+}
+
 /// Mapped chunks, ready to be written.
 pub type FreeChunks = Arc<Mutex<Vec<wgpu::Buffer>>>;
 
@@ -55,6 +64,14 @@ impl Uploads {
     /// Takes out the free chunks (memory is short).
     pub fn take_free(&self) -> Vec<wgpu::Buffer> {
         std::mem::take(&mut *self.free.lock().unwrap())
+    }
+
+    /// Total staging buffer bytes held by this uploader right now.
+    pub fn total_bytes(&self) -> u64 {
+        let free: u64 = self.free.lock().unwrap().iter().map(wgpu::Buffer::size).sum();
+        let current = self.current.as_ref().map_or(0, |(b, _)| b.size());
+        let used: u64 = self.used.iter().map(wgpu::Buffer::size).sum();
+        free + current + used
     }
 
     fn encoder(&mut self) -> &mut wgpu::CommandEncoder {
@@ -221,7 +238,8 @@ pub fn recycle(chunks: Vec<wgpu::Buffer>, free: &FreeChunks) {
         let (back, free) = (chunk.clone(), free.clone());
         chunk.slice(..).map_async(wgpu::MapMode::Write, move |r| {
             let mut free = free.lock().unwrap();
-            if r.is_ok() && free.iter().map(wgpu::Buffer::size).sum::<u64>() + back.size() <= KEEP {
+            let limit = staging_keep_limit();
+            if r.is_ok() && free.iter().map(wgpu::Buffer::size).sum::<u64>() + back.size() <= limit {
                 free.push(back);
             }
         });

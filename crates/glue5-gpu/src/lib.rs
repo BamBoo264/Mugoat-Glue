@@ -124,9 +124,9 @@ pub fn screenshots_written(timeout: std::time::Duration) -> bool {
     done::screenshots_written(timeout)
 }
 
-/// [`trim`] was asked for since the last call.
+/// [`trim`] was asked for since the last call (including memory-guard requests).
 pub(crate) fn take_trim() -> bool {
-    TRIM.swap(false, Ordering::Relaxed)
+    TRIM.swap(false, Ordering::AcqRel) || glue5_runtime::memory::take_gpu_trim_request()
 }
 
 #[cfg(target_os = "android")]

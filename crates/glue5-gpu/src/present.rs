@@ -1181,8 +1181,12 @@ impl Gpu {
         self.scene.next_frame(wanted, id, size, scale);
         self.scene.sprites = glue5_runtime::sprites::in_world();
         self.stats.presents += 1;
+        if (self.stats.presents + self.total_presents).is_multiple_of(8) {
+            self.sync_memory_telemetry();
+        }
         if self.last_stats.elapsed() >= Duration::from_secs(10) {
             self.total_presents += self.stats.presents;
+            self.sync_memory_telemetry();
             self.log_stats();
             // Bind groups unused for 10-20 s, freed off the command thread.
             let stale = self.binds.age();

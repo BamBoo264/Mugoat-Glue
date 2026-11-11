@@ -1427,22 +1427,29 @@ impl Gpu {
     }
 
     /// Frees what is kept only to be faster ([`crate::trim`]), all made
-    /// again when needed: objects kept for reuse, free staging memory,
-    /// bind groups unused since the last statistics, idle shader modules.
+    /// again when needed: objects kept for reuse, empty 4 MiB buffer slabs,
+    /// free staging memory, bind groups unused since the last statistics,
+    /// idle shader modules.
     pub(crate) fn trim(&mut self) {
         let kept = self.recycler.release(&mut self.graveyard);
+        let keep_spare = usize::from(
+            glue5_runtime::memory::pressure_level() < glue5_runtime::memory::GuardPressure::Critical,
+        );
+        let slabs_freed = self.slabs.reclaim_empty(keep_spare);
         let mut staging = self.uploads.take_free();
         staging.extend(self.staging.take_free());
         let staging_bytes: u64 = staging.iter().map(wgpu::Buffer::size).sum();
         let groups = self.binds.take_old();
         log::warn!(
-            "gpu: memory is short: released {} MiB of objects kept for reuse, {} MiB of staging memory, {} bind groups",
+            "gpu: memory is short: released {} MiB of objects kept for reuse, {} MiB of empty slabs, {} MiB of staging memory, {} bind groups",
             kept >> 20,
+            slabs_freed >> 20,
             staging_bytes >> 20,
             groups.len()
         );
         self.pool.background(move || drop((staging, groups)));
         self.release_idle_modules(usize::MAX);
+        self.sync_memory_telemetry();
     }
 
     /// The textures' and buffers' bytes.
@@ -1452,10 +1459,37 @@ impl Gpu {
 
     /// What Metal has allocated for the device, all resources included.
     #[cfg(target_vendor = "apple")]
-    fn gpu_memory(&self) -> String {
+    pub(crate) fn metal_allocated_bytes(&self) -> u64 {
         use objc2_metal::MTLDevice;
         unsafe { self.device.as_hal::<wgpu::hal::api::Metal>() }
-            .map_or(String::new(), |d| format!(", Metal {} MiB", d.raw_device().currentAllocatedSize() >> 20))
+            .map_or(0, |d| d.raw_device().currentAllocatedSize() as u64)
+    }
+
+    #[cfg(not(target_vendor = "apple"))]
+    pub(crate) fn metal_allocated_bytes(&self) -> u64 {
+        0
+    }
+
+    /// Publishes live GPU allocation counts to `glue5-runtime` so the memory guard
+    /// accounts for real texture pool & Metal consumption instead of WASM heap alone.
+    pub(crate) fn sync_memory_telemetry(&self) {
+        let [textures_bytes, buffers_bytes] = self.gpu_bytes();
+        let profile = glue5_runtime::memory::MemoryProfile::detect();
+        glue5_runtime::memory::update_gpu_stats(glue5_runtime::memory::GpuMemoryStats {
+            textures_bytes,
+            buffers_bytes,
+            metal_allocated_bytes: self.metal_allocated_bytes(),
+            slabs_bytes: self.slabs.bytes(),
+            pending_decode_bytes: self.decodes.iter().map(|d| d.row_bytes as u64 * d.rows as u64 * d.extent.depth_or_array_layers as u64).sum(),
+            staging_bytes: self.uploads.total_bytes(),
+            tex_pool_budget_bytes: profile.tex_pool_budget_bytes,
+        });
+    }
+
+    /// What Metal has allocated for the device, all resources included.
+    #[cfg(target_vendor = "apple")]
+    fn gpu_memory(&self) -> String {
+        format!(", Metal {} MiB", self.metal_allocated_bytes() >> 20)
     }
 
     #[cfg(not(target_vendor = "apple"))]

@@ -180,7 +180,10 @@ pub fn run() -> Result<()> {
         // their memory, and from Android 14 the levels for an app still
         // running are no longer sent. A trim is cheap (what it frees is made
         // again as frames need it).
-        Event::AppLowMemory { .. } => glue5_gpu::trim(),
+        Event::AppLowMemory { .. } => {
+            glue5_runtime::memory::note_low_memory_warning();
+            glue5_gpu::trim();
+        }
         Event::AppDidEnterForeground { .. } => {
             life.background.store(false, Ordering::Relaxed);
             life.came_back.store(true, Ordering::Relaxed);

@@ -370,7 +370,9 @@ impl Settings {
         if preset != GraphicsPreset::Custom {
             self.custom_graphics = preset.defaults();
             self.render_scale = Some(recommended_scale(preset, window_height));
-            let small_ram = MOBILE && sdl3::cpuinfo::system_ram() < LOW_MEMORY_RAM_MB;
+            let tight_device = glue5_runtime::memory::MemoryProfile::detect().recommends_low_memory()
+                || sdl3::cpuinfo::system_ram() < LOW_MEMORY_RAM_MB;
+            let small_ram = MOBILE && tight_device;
             self.low_memory = small_ram || (MOBILE && matches!(preset, GraphicsPreset::UltraLow | GraphicsPreset::Low));
         }
         self.graphics_applied = false;
