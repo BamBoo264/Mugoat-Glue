@@ -1,10 +1,10 @@
 //! Draws and dispatches: render passes, pipelines, bind groups.
 
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
 use arrayvec::ArrayVec;
 use glue5_runtime::gpu::Command;
-use glue5_runtime::qos::{self, Qos};
 use rustc_hash::FxHashMap;
 use wgpu::{TextureFormat, TextureViewDimension};
 
@@ -542,26 +542,41 @@ impl Gpu {
         if let Some(cell) = self.pipes.get(&recipe) {
             return cell.clone();
         }
-        let cell: Arc<pipeline::Cell> = Arc::new(OnceLock::new());
+        self.compiler.misses.fetch_add(1, Ordering::Relaxed);
+        let cell = Arc::new(pipeline::Cell::new_queued(recipe.clone(), vs.clone(), ps.clone()));
         self.pipes.insert(recipe.clone(), cell.clone());
-        let (compiler, c) = (self.compiler.clone(), cell.clone());
+        self.enqueue_pipeline_compile(cell.clone(), recipe, vs, ps);
+        cell
+    }
+
+    fn enqueue_pipeline_compile(
+        &self,
+        cell: Arc<pipeline::Cell>,
+        recipe: Arc<Recipe>,
+        vs: Arc<Program>,
+        ps: Option<Arc<Program>>,
+    ) {
+        let compiler = self.compiler.clone();
+        compiler.pending.fetch_add(1, Ordering::Relaxed);
         let job = move || {
-            c.get_or_init(|| compiler.compile(&vs, ps.as_deref(), &recipe));
+            struct Guard(Arc<pipeline::Compiler>);
+            impl Drop for Guard {
+                fn drop(&mut self) {
+                    self.0.pending.fetch_sub(1, Ordering::Relaxed);
+                }
+            }
+            let _guard = Guard(compiler.clone());
+            let pipe = compiler.compile(&vs, ps.as_deref(), &recipe);
+            let epoch = compiler.epoch.load(Ordering::Relaxed);
+            cell.finish(pipe, epoch);
         };
         if self.settings.sync_pipelines {
             job();
         } else {
-            // Its draws are skipped meanwhile, nothing waits: in a lower
-            // class (efficiency cores, where there are some) it leaves the
-            // engine's threads their cores. A new pipeline takes ~200 ms
-            // of CPU on an A15, which has two performance cores.
-            self.pool.urgent(move || {
-                qos::set(Qos::Utility);
-                job();
-                qos::set(Qos::Initiated);
-            });
+            // Keep compile threads at Pool's Initiated QoS rather than Utility (E-cores only)
+            // so world/road shader variants finish promptly while moving through the map.
+            self.pool.urgent(job);
         }
-        cell
     }
 
     // ---- bind groups -----------------------------------------------------------------
@@ -1160,12 +1175,32 @@ impl Gpu {
         let Some(cell) = self.pipeline(&vs, ps.as_ref(), [vs_float32, ps_float32]) else {
             return self.skip("no pipeline");
         };
-        let Some(pipe_slot) = cell.get() else {
-            self.stats.pending_skips += 1;
-            return;
-        };
-        let Some(pipe) = pipe_slot else {
-            return self.skip("pipeline failed");
+        let pipe = match cell.poll(self.epoch) {
+            pipeline::CellPoll::Ready(pipe) => {
+                self.compiler.hits.fetch_add(1, Ordering::Relaxed);
+                pipe
+            }
+            pipeline::CellPoll::Pending => {
+                self.stats.pending_skips += 1;
+                return;
+            }
+            pipeline::CellPoll::RetryDue => {
+                if let Some((recipe, vs_retry, ps_retry)) = cell.claim_retry() {
+                    self.compiler.retries.fetch_add(1, Ordering::Relaxed);
+                    self.enqueue_pipeline_compile(cell.clone(), recipe, vs_retry, ps_retry);
+                    if let pipeline::CellPoll::Ready(pipe) = cell.poll(self.epoch) {
+                        self.compiler.hits.fetch_add(1, Ordering::Relaxed);
+                        pipe
+                    } else {
+                        self.stats.pending_skips += 1;
+                        return;
+                    }
+                } else {
+                    self.stats.pending_skips += 1;
+                    return;
+                }
+            }
+            pipeline::CellPoll::Failed => return self.skip("pipeline failed"),
         };
         self.last_pipe = Some(cell.clone());
         self.pdirty = false;

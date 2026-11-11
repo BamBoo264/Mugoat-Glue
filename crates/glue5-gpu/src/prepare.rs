@@ -11,8 +11,8 @@
 //! still compile in the background while playing; their draws are skipped
 //! meanwhile.
 
+use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, OnceLock};
 use std::time::Instant;
 
 use anyhow::Result;
@@ -57,7 +57,7 @@ pub(crate) fn prepare(gpu: &Device, settings: &Settings, progress: &Progress) ->
     let mut seen = FxHashSet::default();
     compute_recipes.retain(|r| seen.insert(r.clone()));
     progress.total.store(recipes.len() + compute_recipes.len(), Ordering::Relaxed);
-    let cells: Vec<Arc<Cell>> = recipes.iter().map(|_| Arc::new(OnceLock::new())).collect();
+    let cells: Vec<Arc<Cell>> = recipes.iter().map(|_| Arc::new(Cell::new())).collect();
     let computes = Arc::new(Computes::default());
     let next = AtomicUsize::new(0);
     let threads = glue5_runtime::cores();
@@ -69,7 +69,7 @@ pub(crate) fn prepare(gpu: &Device, settings: &Settings, progress: &Progress) ->
                     if let Some(r) = recipes.get(i) {
                         let pipe = programs(&library, &gpu.device, r)
                             .and_then(|(vs, ps)| compiler.compile(&vs, ps.as_deref(), r));
-                        let _ = cells[i].set(pipe);
+                        cells[i].finish_prepared(pipe);
                     } else if let Some(r) = compute_recipes.get(i - recipes.len()) {
                         compute(&library, &compiler, &computes, r);
                     } else {
@@ -86,7 +86,7 @@ pub(crate) fn prepare(gpu: &Device, settings: &Settings, progress: &Progress) ->
     let mut modules = Vec::new();
     library.take_idle_modules(0, usize::MAX, &mut modules);
     drop(modules);
-    let failed = cells.iter().filter(|c| matches!(c.get(), Some(None))).count();
+    let failed = cells.iter().filter(|c| c.is_failed()).count();
     log::info!(
         "gpu: {} known pipelines prepared in {:.1} s ({} recipes, {failed} not usable; {} compute; {threads} threads)",
         recipes.len(),

@@ -98,8 +98,151 @@ pub struct Pipe {
     pub needs: Vec<VertexNeed>,
 }
 
-/// Set once the compile is done; `None`: the pipeline is not valid.
-pub type Cell = OnceLock<Option<Pipe>>;
+/// Maximum compile attempts before permanently marking a pipeline invalid.
+pub const MAX_PIPELINE_ATTEMPTS: u8 = 3;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CellPoll<'a> {
+    Ready(&'a Pipe),
+    Pending,
+    RetryDue,
+    Failed,
+}
+
+#[derive(Default)]
+struct CellRetryState {
+    in_flight: bool,
+    attempts: u8,
+    next_retry_epoch: u64,
+}
+
+impl CellRetryState {
+    fn poll(&self, epoch: u64, is_ready: bool) -> CellStateKind {
+        if is_ready {
+            CellStateKind::Ready
+        } else if self.in_flight {
+            CellStateKind::Pending
+        } else if self.attempts >= MAX_PIPELINE_ATTEMPTS {
+            CellStateKind::Failed
+        } else if epoch >= self.next_retry_epoch && self.attempts > 0 {
+            CellStateKind::RetryDue
+        } else if self.attempts == 0 {
+            CellStateKind::Pending
+        } else {
+            // Backoff active: wait until `next_retry_epoch` cleanly.
+            CellStateKind::Pending
+        }
+    }
+
+    fn finish(&mut self, ok: bool, epoch: u64) {
+        self.in_flight = false;
+        if !ok {
+            self.attempts = self.attempts.saturating_add(1);
+            let backoff = match self.attempts {
+                1 => 30,
+                _ => 120,
+            };
+            self.next_retry_epoch = epoch.saturating_add(backoff);
+        }
+    }
+
+    fn claim_retry(&mut self, is_ready: bool) -> bool {
+        if is_ready || self.in_flight || self.attempts >= MAX_PIPELINE_ATTEMPTS {
+            return false;
+        }
+        self.in_flight = true;
+        true
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum CellStateKind {
+    Ready,
+    Pending,
+    RetryDue,
+    Failed,
+}
+
+struct RetryContext {
+    recipe: Arc<Recipe>,
+    vs: Arc<Program>,
+    ps: Option<Arc<Program>>,
+}
+
+/// Asynchronous render-pipeline slot with a lock-free `OnceLock<Pipe>` fast
+/// path and bounded retry backoff if compilation fails transiently.
+pub struct Cell {
+    ready: OnceLock<Pipe>,
+    state: Mutex<(CellRetryState, Option<Box<RetryContext>>)>,
+}
+
+impl Cell {
+    pub fn new() -> Cell {
+        Cell { ready: OnceLock::new(), state: Mutex::new((CellRetryState::default(), None)) }
+    }
+
+    pub fn new_queued(recipe: Arc<Recipe>, vs: Arc<Program>, ps: Option<Arc<Program>>) -> Cell {
+        Cell {
+            ready: OnceLock::new(),
+            state: Mutex::new((
+                CellRetryState { in_flight: true, attempts: 0, next_retry_epoch: 0 },
+                Some(Box::new(RetryContext { recipe, vs, ps })),
+            )),
+        }
+    }
+
+    pub fn poll(&self, epoch: u64) -> CellPoll<'_> {
+        if let Some(pipe) = self.ready.get() {
+            return CellPoll::Ready(pipe);
+        }
+        let st = &self.state.lock().unwrap().0;
+        match st.poll(epoch, false) {
+            CellStateKind::Ready => CellPoll::Ready(self.ready.get().unwrap()),
+            CellStateKind::Pending => CellPoll::Pending,
+            CellStateKind::RetryDue => CellPoll::RetryDue,
+            CellStateKind::Failed => CellPoll::Failed,
+        }
+    }
+
+    pub fn finish(&self, pipe: Option<Pipe>, epoch: u64) {
+        let ok = pipe.is_some();
+        if let Some(p) = pipe {
+            let _ = self.ready.set(p);
+        }
+        let mut guard = self.state.lock().unwrap();
+        guard.0.finish(ok, epoch);
+        if ok || guard.0.attempts >= MAX_PIPELINE_ATTEMPTS {
+            guard.1 = None;
+        }
+    }
+
+    pub fn finish_prepared(&self, pipe: Option<Pipe>) {
+        if let Some(p) = pipe {
+            let _ = self.ready.set(p);
+            let mut guard = self.state.lock().unwrap();
+            guard.0.in_flight = false;
+            guard.1 = None;
+        } else {
+            let mut guard = self.state.lock().unwrap();
+            guard.0.in_flight = false;
+            guard.0.attempts = MAX_PIPELINE_ATTEMPTS;
+            guard.1 = None;
+        }
+    }
+
+    pub fn is_failed(&self) -> bool {
+        self.ready.get().is_none() && self.state.lock().unwrap().0.attempts >= MAX_PIPELINE_ATTEMPTS
+    }
+
+    pub fn claim_retry(&self) -> Option<(Arc<Recipe>, Arc<Program>, Option<Arc<Program>>)> {
+        let mut guard = self.state.lock().unwrap();
+        let ready = self.ready.get().is_some();
+        if !guard.0.claim_retry(ready) {
+            return None;
+        }
+        guard.1.as_ref().map(|ctx| (ctx.recipe.clone(), ctx.vs.clone(), ctx.ps.clone()))
+    }
+}
 
 /// What compiling needs, shared with the compile threads.
 pub struct Compiler {
@@ -113,6 +256,11 @@ pub struct Compiler {
     layouts: Mutex<FxHashMap<(u32, u32), wgpu::PipelineLayout>>,
     pub compiled: AtomicU32,
     pub failed: AtomicU32,
+    pub pending: AtomicU32,
+    pub hits: AtomicU64,
+    pub misses: AtomicU64,
+    pub retries: AtomicU64,
+    pub epoch: AtomicU64,
     pub compile_us: AtomicU64,
 }
 
@@ -129,6 +277,11 @@ impl Compiler {
             layouts: Mutex::default(),
             compiled: AtomicU32::new(0),
             failed: AtomicU32::new(0),
+            pending: AtomicU32::new(0),
+            hits: AtomicU64::new(0),
+            misses: AtomicU64::new(0),
+            retries: AtomicU64::new(0),
+            epoch: AtomicU64::new(0),
             compile_us: AtomicU64::new(0),
         }
     }
@@ -774,9 +927,25 @@ pub struct Known {
 /// skipped.
 pub fn known_recipes(cache_dir: Option<&std::path::Path>) -> Known {
     let recorded = cache_dir.and_then(|d| std::fs::read_to_string(d.join("pipelines.jsonl")).ok()).unwrap_or_default();
+    let (mut known, _, _, corrupt) = parse_known_lines(SEED.lines().chain(recorded.lines()));
+    if corrupt > 0 {
+        log::warn!("gpu: skipped {corrupt} unreadable lines in pipelines.jsonl");
+    }
+    known.render.shrink_to_fit();
+    known
+}
+
+fn parse_known_lines<'a>(lines: impl Iterator<Item = &'a str>) -> (Known, FxHashSet<Recipe>, FxHashSet<ComputeRecipe>, usize) {
     let (mut known, mut seen, mut seen_compute) = (Known::default(), FxHashSet::default(), FxHashSet::default());
-    for line in SEED.lines().chain(recorded.lines()) {
-        let Ok(v) = serde_json::from_str::<Value>(line) else { continue };
+    let mut corrupt = 0usize;
+    for line in lines {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let Ok(v) = serde_json::from_str::<Value>(line) else {
+            corrupt += 1;
+            continue;
+        };
         if v.get("cs").is_some() {
             if let Some(r) = ComputeRecipe::from_json(&v).filter(|r| seen_compute.insert(r.clone())) {
                 known.compute.push(r);
@@ -785,7 +954,7 @@ pub fn known_recipes(cache_dir: Option<&std::path::Path>) -> Known {
             known.render.push(Arc::new(r));
         }
     }
-    known
+    (known, seen, seen_compute, corrupt)
 }
 
 #[cfg(test)]
@@ -936,5 +1105,45 @@ mod tests {
         assert_eq!(r.targets, [Some(TextureFormat::Rgba16Float), None, Some(TextureFormat::Rg16Float)]);
         assert_eq!(r.depth_format, Some(TextureFormat::Depth24PlusStencil8));
         assert_eq!(r.for_device(&caps(Features::empty(), false, false)), r);
+    }
+
+    #[test]
+    fn cell_retry_and_backoff_lifecycle() {
+        let mut st = CellRetryState { in_flight: true, attempts: 0, next_retry_epoch: 0 };
+        assert_eq!(st.poll(0, false), CellStateKind::Pending);
+
+        // First compile failure -> retry scheduled for epoch 10 + 30 = 40.
+        st.finish(false, 10);
+        assert_eq!(st.attempts, 1);
+        assert_eq!(st.poll(39, false), CellStateKind::Pending);
+        assert_eq!(st.poll(40, false), CellStateKind::RetryDue);
+        assert!(st.claim_retry(false));
+        assert!(!st.claim_retry(false), "no duplicate retries while in flight");
+        assert_eq!(st.poll(40, false), CellStateKind::Pending);
+
+        // Second failure -> retry scheduled for epoch 40 + 120 = 160.
+        st.finish(false, 40);
+        assert_eq!(st.attempts, 2);
+        assert_eq!(st.poll(159, false), CellStateKind::Pending);
+        assert_eq!(st.poll(160, false), CellStateKind::RetryDue);
+        assert!(st.claim_retry(false));
+
+        // Exhausting MAX_PIPELINE_ATTEMPTS (3) marks Failed permanently.
+        st.finish(false, 160);
+        assert_eq!(st.attempts, MAX_PIPELINE_ATTEMPTS);
+        assert_eq!(st.poll(999, false), CellStateKind::Failed);
+        assert!(!st.claim_retry(false));
+
+        // Success overrides cleanly.
+        assert_eq!(st.poll(999, true), CellStateKind::Ready);
+    }
+
+    #[test]
+    fn corrupt_pipelines_jsonl_ignored_safely() {
+        let valid = SEED.lines().next().unwrap();
+        let lines = [valid, "{corrupt json", "", "{\"partial\": true", valid];
+        let (known, _, _, corrupt) = parse_known_lines(lines.into_iter());
+        assert_eq!(known.render.len(), 1);
+        assert_eq!(corrupt, 2);
     }
 }

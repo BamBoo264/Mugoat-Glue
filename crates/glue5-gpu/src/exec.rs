@@ -656,6 +656,7 @@ impl Gpu {
             epoch: self.epoch,
         });
         self.epoch += 1;
+        self.compiler.epoch.store(self.epoch, Ordering::Relaxed);
         self.counter_slot = 0;
         self.chunk_passes = 0;
         self.batch_since = None;
@@ -854,6 +855,22 @@ impl Gpu {
             })),
         );
         self.srv_object_changed(id);
+        // Zero-initialize new/recycled render & depth targets cleanly so early skipped
+        // passes (while pipelines warm) never leave stale Metal heap memory or NaNs.
+        if usage.contains(wgpu::TextureUsages::RENDER_ATTACHMENT) && dimension == wgpu::TextureDimension::D2 {
+            let depth_stencil = tf.format.is_depth_stencil_format();
+            let clear_slices = layers.min(6);
+            for slice in 0..clear_slices {
+                self.clears.push(Clear {
+                    tex: id,
+                    mip: 0,
+                    slice,
+                    color: (!depth_stencil).then_some(wgpu::Color::TRANSPARENT),
+                    depth: tf.format.has_depth_aspect().then_some(1.0),
+                    stencil: tf.format.has_stencil_aspect().then_some(0),
+                });
+            }
+        }
     }
 
     fn create_buffer(&mut self, id: u32, size: u32, bind: u32, misc: u32, stride: u32) {
@@ -1548,7 +1565,7 @@ impl Gpu {
         };
         let c = &self.compiler;
         log::info!(
-            "gpu: {:.1} fps ({frames_line}), {} draws/frame, {} dispatches, {:.1} passes/frame (ended by {}), {:.1} submits/frame ({}), recording {:.0}% ({:.1} ms/frame), encoding {:.1} ms/frame, submitting {:.1}, presenting {:.1}, releasing {:.1}, waiting for the GPU {:.1}, for a drawable {:.1}; pipelines {} ({} failed, {:.0} ms compiling), draws waiting for one {}, dispatches waiting for one {}, skipped [{}], clamped {}, bind groups +{} ({} cached){decoding}, objects {} ({memory}), errors +{}",
+            "gpu: {:.1} fps ({frames_line}), {} draws/frame, {} dispatches, {:.1} passes/frame (ended by {}), {:.1} submits/frame ({}), recording {:.0}% ({:.1} ms/frame), encoding {:.1} ms/frame, submitting {:.1}, presenting {:.1}, releasing {:.1}, waiting for the GPU {:.1}, for a drawable {:.1}; pipelines {} ({} failed, {} pending, {} hits, {} misses, {} retries, {:.0} ms compiling), draws waiting for one {}, dispatches waiting for one {}, skipped [{}], clamped {}, bind groups +{} ({} cached){decoding}, objects {} ({memory}), errors +{}",
             st.presents as f64 / secs,
             st.draws / frames,
             st.dispatches / frames,
@@ -1566,6 +1583,10 @@ impl Gpu {
             per_frame(drawable),
             c.compiled.load(std::sync::atomic::Ordering::Relaxed),
             c.failed.load(std::sync::atomic::Ordering::Relaxed),
+            c.pending.load(std::sync::atomic::Ordering::Relaxed),
+            c.hits.load(std::sync::atomic::Ordering::Relaxed),
+            c.misses.load(std::sync::atomic::Ordering::Relaxed),
+            c.retries.load(std::sync::atomic::Ordering::Relaxed),
             c.compile_us.swap(0, std::sync::atomic::Ordering::Relaxed) as f64 / 1000.0,
             st.pending_skips,
             st.late_computes,
