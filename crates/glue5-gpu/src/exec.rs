@@ -355,15 +355,16 @@ impl Gpu {
 
     /// Nothing to do: complete what the engine may be waiting on.
     fn idle(&mut self) {
-        // A readback the engine may be blocked on goes to the GPU now. Other
-        // work once it has been gathering for a few milliseconds, else with
-        // the next chunk, fence or present: the engine pauses many times a
-        // frame, and every submit costs (a Metal command buffer each, about
-        // thirty a frame when every pause submitted). Query results (events,
-        // occlusion) are polled, frames later: they can wait as long.
+        // Readbacks and pending queries/events that the engine may stall on
+        // commit immediately when the ring goes idle, instead of sitting behind
+        // IDLE_BATCH (4 ms). Remaining batched work flushes once ripe.
+        let pending_query = !self.occlusion.pending.is_empty()
+            || self.works.iter().any(|w| matches!(w, Work::Query { .. } | Work::Store { .. }));
         let ripe = self.batch_since.is_some_and(|t| t.elapsed() >= IDLE_BATCH);
         if self.waited_on {
             self.flush("idle (readback)");
+        } else if pending_query {
+            self.flush("idle (query)");
         } else if ripe {
             self.flush("idle");
         }

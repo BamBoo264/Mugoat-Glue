@@ -124,9 +124,13 @@ fn run(rx: Receiver<Vec<u8>>, file: File, to_stdout: bool) {
 /// Lines the engine prints over and over (online, some messages come every
 /// frame: millions of lines, a log of hundreds of MB) are written the first
 /// [`Repeats::KEEP`] times, then only counted, the count written at each
-/// power of two.
+/// power of two. Two rotating generations prevent clearing active suppression
+/// counts in one burst when distinct lines reach the cap.
 #[derive(Default)]
-struct Repeats(HashMap<u64, u64>);
+struct Repeats {
+    current: HashMap<u64, u64>,
+    previous: HashMap<u64, u64>,
+}
 
 enum Repeat {
     Write,
@@ -136,17 +140,24 @@ enum Repeat {
 
 impl Repeats {
     const KEEP: u64 = 10;
-    /// Distinct lines remembered (lines with addresses or times in them are
-    /// all distinct): past this the counts start over.
-    const LINES: usize = 50_000;
+    /// Distinct lines per generation (50,000 total across both generations).
+    const GEN_LINES: usize = 25_000;
 
     fn check(&mut self, bytes: &[u8]) -> Repeat {
-        if self.0.len() >= Self::LINES {
-            self.0.clear();
-        }
-        let n = self.0.entry(hash(bytes)).or_default();
-        *n += 1;
-        match *n {
+        let h = hash(bytes);
+        let n = if let Some(n) = self.current.get_mut(&h) {
+            *n += 1;
+            *n
+        } else {
+            let carried = self.previous.remove(&h).unwrap_or(0);
+            if self.current.len() >= Self::GEN_LINES {
+                self.previous = std::mem::take(&mut self.current);
+            }
+            let next = carried + 1;
+            self.current.insert(h, next);
+            next
+        };
+        match n {
             n if n <= Self::KEEP => Repeat::Write,
             n if n.is_power_of_two() => Repeat::Count(n),
             _ => Repeat::Skip,
@@ -224,5 +235,24 @@ mod tests {
             .collect();
         assert_eq!(written, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1016, 1032]);
         assert!(matches!(repeats.check(b"Error: other\n"), Repeat::Write));
+    }
+
+    #[test]
+    fn repeats_preserves_hot_counts_across_generation_rollover() {
+        let mut r = Repeats::default();
+        let hot = b"spammy warning line\n";
+        for _ in 0..10 {
+            assert!(matches!(r.check(hot), Repeat::Write));
+        }
+        assert!(matches!(r.check(hot), Repeat::Skip));
+
+        for i in 0..(Repeats::GEN_LINES + 500) {
+            let unique = format!("unique msg {i}\n");
+            let _ = r.check(unique.as_bytes());
+        }
+
+        for _ in 0..4 {
+            assert!(!matches!(r.check(hot), Repeat::Write));
+        }
     }
 }

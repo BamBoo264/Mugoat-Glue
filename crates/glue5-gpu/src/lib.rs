@@ -557,3 +557,18 @@ pub(crate) fn log_once(key: &str, msg: impl FnOnce() -> String) {
         log::warn!("gpu: {}", msg());
     }
 }
+
+/// Logs at most once per `interval` for recurring runtime telemetry keys.
+#[allow(dead_code)]
+pub(crate) fn log_rate_limited(key: &'static str, interval: Duration, msg: impl FnOnce() -> String) {
+    use std::collections::HashMap;
+    use std::sync::Mutex;
+    static LAST: Mutex<Option<HashMap<&'static str, Instant>>> = Mutex::new(None);
+    let now = Instant::now();
+    let mut map = LAST.lock().unwrap();
+    let map = map.get_or_insert_default();
+    if map.get(key).is_none_or(|t| now.duration_since(*t) >= interval) {
+        map.insert(key, now);
+        log::warn!("gpu: {}", msg());
+    }
+}
