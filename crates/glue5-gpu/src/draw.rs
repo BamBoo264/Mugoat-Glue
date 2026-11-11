@@ -1109,8 +1109,25 @@ impl Gpu {
 
     pub fn draw(&mut self, c: &Command) {
         // kind: 0 draw, 1 indexed, 2 instanced, 3 indexed instanced, 4/5 indirect (indexed / not)
-        let (kind, count, instances, start, base_vertex, start_instance) =
-            (c.w(0), c.w(1), c.w(2), c.w(3), c.w(4) as i32, c.w(5));
+        let kind = c.w(0);
+        let (mut count, mut instances, mut start, mut base_vertex, mut start_instance) =
+            (c.w(1), c.w(2), c.w(3), c.w(4) as i32, c.w(5));
+        let indexed = kind == 4 || (kind < 4 && kind & 1 != 0);
+        let mut fallback_indirect = false;
+        if kind >= 4 && !self.caps.indirect {
+            let offset = c.w(2) as u64;
+            let Some(shadow) = self.objs.buf(c.w(1)).and_then(|b| b.shadow.as_deref()) else {
+                return self.skip("indirect draw without fallback shadow");
+            };
+            let Some((c_cnt, c_inst, c_start, c_base, c_first_inst)) = parse_indirect_args(indexed, shadow, offset) else {
+                return self.skip("invalid indirect fallback arguments");
+            };
+            if c_cnt == 0 || c_inst == 0 {
+                return self.skip("empty indirect draw");
+            }
+            (count, instances, start, base_vertex, start_instance) = (c_cnt, c_inst, c_start, c_base, c_first_inst);
+            fallback_indirect = true;
+        }
         let Some(vs) = self.program(self.s.shader[0]) else {
             return self.skip("no vertex shader");
         };
@@ -1240,7 +1257,6 @@ impl Gpu {
             None => None,
         };
 
-        let indexed = kind == 4 || (kind < 4 && kind & 1 != 0);
         // SV_VertexID / SV_InstanceID do not include the draw's starts; WebGPU's
         // builtins do. Only shaders reading them get the starts folded into
         // the buffer offsets instead.
@@ -1289,23 +1305,25 @@ impl Gpu {
             let Some((b, g)) = self.objs.buf(id).and_then(|b| b.gpu.as_ref().map(|g| (b, g))) else {
                 return self.skip("no index buffer");
             };
-            if offset as u64 >= b.bytes {
-                return self.skip("index buffer bound past its end");
+            let size = if fmt == format::INDEX_U16 { 2u64 } else { 4u64 };
+            let aligned = (b.base + offset as u64).is_multiple_of(size);
+            if offset as u64 >= b.bytes || !aligned || b.bytes.saturating_sub(offset as u64) < size {
+                return self.skip("index buffer bound past end or unaligned");
             }
             let format = if fmt == format::INDEX_U16 { wgpu::IndexFormat::Uint16 } else { wgpu::IndexFormat::Uint32 };
-            let size = if fmt == format::INDEX_U16 { 2 } else { 4 };
             index_max = (b.bytes.saturating_sub(offset as u64) / size).saturating_sub(start as u64);
             b.used.set(epoch);
             index = Some((g.clone(), b.uid, format, b.base + offset as u64));
         }
-        if kind >= 4 && !self.caps.indirect {
-            return self.skip("indirect draw (unsupported by the device)");
-        }
-        let indirect = if kind >= 4 {
+        let indirect = if kind >= 4 && !fallback_indirect {
+            let args_offset = c.w(2) as u64;
             match self.objs.buf(c.w(1)).and_then(|b| b.gpu.as_ref().map(|g| (b, g))) {
                 Some((b, g)) => {
+                    if let Err(reason) = validate_indirect_args(b.bytes, b.usage, args_offset, indexed) {
+                        return self.skip(reason);
+                    }
                     b.used.set(epoch);
-                    Some((g.clone(), b.base + c.w(2) as u64))
+                    Some((g.clone(), b.base + args_offset))
                 }
                 None => return self.skip("indirect draw without arguments"),
             }
@@ -1637,8 +1655,51 @@ fn copy_constants(src: Option<&[u8]>, first: u32, out: &mut [u8]) {
     out[copied..].fill(0);
 }
 
+/// Validates an indirect draw argument buffer before recording into a render pass
+/// so invalid usage, alignment, or out-of-range offsets skip cleanly instead of
+/// poisoning the whole command encoder.
+pub(crate) fn validate_indirect_args(
+    buf_bytes: u64,
+    usage: wgpu::BufferUsages,
+    offset: u64,
+    indexed: bool,
+) -> Result<(), &'static str> {
+    if !usage.contains(wgpu::BufferUsages::INDIRECT) {
+        return Err("indirect buffer lacks INDIRECT usage");
+    }
+    if !offset.is_multiple_of(4) {
+        return Err("unaligned indirect draw offset");
+    }
+    let stride = if indexed { 20 } else { 16 };
+    if offset.checked_add(stride).is_none_or(|end| end > buf_bytes) {
+        return Err("indirect draw arguments out of bounds");
+    }
+    Ok(())
+}
+
+/// Parses CPU-shadowed D3D11/WebGPU indirect draw arguments for devices without
+/// native indirect execution: returns `(count, instances, first, base_vertex, first_instance)`.
+pub(crate) fn parse_indirect_args(indexed: bool, shadow: &[u8], offset: u64) -> Option<(u32, u32, u32, i32, u32)> {
+    if !offset.is_multiple_of(4) {
+        return None;
+    }
+    let at = usize::try_from(offset).ok()?;
+    let needed = if indexed { 20 } else { 16 };
+    let slice = shadow.get(at..at.checked_add(needed)?)?;
+    let w = |idx: usize| -> u32 {
+        let off = idx * 4;
+        u32::from_le_bytes([slice[off], slice[off + 1], slice[off + 2], slice[off + 3]])
+    };
+    if indexed {
+        Some((w(0), w(1), w(2), w(3) as i32, w(4)))
+    } else {
+        Some((w(0), w(1), w(2), 0, w(3)))
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use super::{parse_indirect_args, validate_indirect_args};
     use wgpu::{TextureAspect, TextureDimension as Td, TextureFormat as F, TextureSampleType as S, TextureViewDimension as V};
 
     /// `misfit` refuses exactly what wgpu refuses: each texture in each
@@ -1745,5 +1806,31 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn validate_indirect_args_checks_usage_alignment_and_bounds() {
+        let ok_usage = wgpu::BufferUsages::INDIRECT | wgpu::BufferUsages::COPY_DST;
+        assert!(validate_indirect_args(20, ok_usage, 0, true).is_ok());
+        assert!(validate_indirect_args(16, ok_usage, 0, false).is_ok());
+        assert!(validate_indirect_args(24, ok_usage, 8, false).is_ok());
+        // Missing INDIRECT usage rejected safely.
+        assert!(validate_indirect_args(32, wgpu::BufferUsages::VERTEX, 0, false).is_err());
+        // Unaligned offset rejected safely.
+        assert!(validate_indirect_args(32, ok_usage, 2, false).is_err());
+        // Out of bounds for indexed (needs 20 bytes, only 16 remain).
+        assert!(validate_indirect_args(20, ok_usage, 4, true).is_err());
+    }
+
+    #[test]
+    fn parse_indirect_args_non_indexed_and_indexed() {
+        let non_idx: Vec<u8> = [36u32, 2, 12, 5].into_iter().flat_map(u32::to_le_bytes).collect();
+        assert_eq!(parse_indirect_args(false, &non_idx, 0), Some((36, 2, 12, 0, 5)));
+        assert_eq!(parse_indirect_args(true, &non_idx, 0), None);
+        assert_eq!(parse_indirect_args(false, &non_idx, 2), None);
+
+        let idx: Vec<u8> = [120u32, 4, 6, (-3i32) as u32, 9].into_iter().flat_map(u32::to_le_bytes).collect();
+        assert_eq!(parse_indirect_args(true, &idx, 0), Some((120, 4, 6, -3, 9)));
+        assert_eq!(parse_indirect_args(true, &idx, 4), None);
     }
 }

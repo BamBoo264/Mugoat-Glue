@@ -909,7 +909,9 @@ impl Gpu {
                 bytes,
                 uid: self.next_buffer_uid,
                 usage,
-                shadow: (bind & format::BIND_CONSTANT != 0).then(|| vec![0; size as usize]),
+                shadow: (bind & format::BIND_CONSTANT != 0
+                    || (!self.caps.indirect && misc & format::MISC_DRAWINDIRECT_ARGS != 0))
+                    .then(|| vec![0; size as usize]),
                 version: 0,
                 used: Default::default(),
                 uploaded: Default::default(),
