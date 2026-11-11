@@ -213,7 +213,7 @@ pub fn run() -> Result<()> {
         #[cfg(target_os = "android")]
         asked_rate: None,
         #[cfg(target_os = "ios")]
-        thermal: (-1, None),
+        thermal: (-1, None, glue5_runtime::frame_pace::ThermalPolicy::default(), 0),
         text_input,
         typing: None,
         typing_rect: None,
@@ -394,10 +394,10 @@ struct App {
     /// The display rate asked of Android for the window's surface.
     #[cfg(target_os = "android")]
     asked_rate: Option<u32>,
-    /// The device's thermal state (iOS: 0 nominal to 3 critical) and when it
-    /// was last asked.
+    /// The device's thermal state (iOS: 0 nominal to 3 critical), last sample time,
+    /// hysteresis policy, and active throttled FPS ceiling.
     #[cfg(target_os = "ios")]
-    thermal: (isize, Option<Instant>),
+    thermal: (isize, Option<Instant>, glue5_runtime::frame_pace::ThermalPolicy, u32),
     events: sdl3::EventPump,
     mouse: sdl3::mouse::MouseUtil,
     text_input: sdl3::keyboard::TextInputUtil,
@@ -789,11 +789,12 @@ impl App {
         glue5_gpu::perf::set_on(in_game && self.settings.overlay == PerfOverlay::Glue5);
         #[cfg(target_os = "ios")]
         self.watch_thermal();
-        self.presentation.set_frame_rate(self.settings.max_fps);
+        let target_fps = self.effective_max_fps();
+        self.presentation.set_frame_rate(target_fps);
         #[cfg(target_os = "android")]
-        if self.asked_rate != Some(self.settings.max_fps) {
-            self.asked_rate = Some(self.settings.max_fps);
-            ask_frame_rate(&self.window, self.settings.max_fps);
+        if self.asked_rate != Some(target_fps) {
+            self.asked_rate = Some(target_fps);
+            ask_frame_rate(&self.window, target_fps);
         }
         self.presentation.set_upscaler(upscaler(&self.settings));
         self.presentation.set_sharpness(self.settings.sharpness);
@@ -1272,21 +1273,46 @@ impl App {
         }
     }
 
-    /// Logs the phone's thermal state when it changes (asked once a second):
-    /// hot (serious within a minute of play on an iPhone 16 Pro), iOS holds
-    /// the game to its efficiency cores and frames take 20-50 ms, which
-    /// tests and logs should know.
+    fn effective_max_fps(&self) -> u32 {
+        #[cfg(target_os = "ios")]
+        if self.thermal.3 > 0 {
+            return if self.settings.max_fps == 0 {
+                self.thermal.3
+            } else {
+                self.thermal.3.min(self.settings.max_fps)
+            };
+        }
+        self.settings.max_fps
+    }
+
+    /// Watches thermal state once per second on iOS, logs transitions, updates
+    /// overlay telemetry, and steps the FPS ceiling smoothly under sustained heat.
     #[cfg(target_os = "ios")]
     fn watch_thermal(&mut self) {
         if self.thermal.1.is_some_and(|at| at.elapsed() < Duration::from_secs(1)) {
             return;
         }
+        static START: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
+        let now_ms = START.get_or_init(Instant::now).elapsed().as_millis() as u64;
         let state = objc2_foundation::NSProcessInfo::processInfo().thermalState().0;
-        if state != self.thermal.0 {
+        let (cap, trim) = self.thermal.2.step(state, now_ms, self.settings.max_fps);
+        let throttled = if cap != self.settings.max_fps { cap } else { 0 };
+        if state != self.thermal.0 || cap != self.thermal.3 {
             const NAMES: [&str; 4] = ["nominal", "fair", "serious", "critical"];
-            log::info!("thermal: {}", NAMES.get(state as usize).copied().unwrap_or("?"));
+            log::info!(
+                "thermal: {} (cap {} fps)",
+                NAMES.get(state as usize).copied().unwrap_or("?"),
+                if cap == 0 { "unlimited".into() } else { cap.to_string() }
+            );
         }
-        self.thermal = (state, Some(Instant::now()));
+        glue5_runtime::frame_pace::set_thermal_cap(throttled);
+        glue5_gpu::perf::set_thermal(state.clamp(0, 3) as u8, throttled);
+        if trim {
+            glue5_gpu::trim();
+        }
+        self.thermal.0 = state;
+        self.thermal.1 = Some(Instant::now());
+        self.thermal.3 = cap;
     }
 
     /// A surface for the window's current native surface, for the renderer

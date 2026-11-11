@@ -21,6 +21,35 @@ pub const FRAMES: usize = 120;
 static ON: AtomicBool = AtomicBool::new(false);
 static LIVE: Mutex<Live> = Mutex::new(Live::new());
 
+/// Detailed subsystem metrics rendered in developer mode (`OverlayDetail::Full`).
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Diagnostics {
+    pub tex_bytes: u64,
+    pub tex_budget_bytes: u64,
+    pub buf_bytes: u64,
+    pub metal_allocated_bytes: u64,
+    pub slabs_used_bytes: u64,
+    pub slabs_total_bytes: u64,
+    pub staging_bytes: u64,
+    pub tex_hits: u64,
+    pub tex_misses: u64,
+    pub tex_evictions: u64,
+    pub tex_reloads: u64,
+    pub pending_decodes: u32,
+    pub pending_decode_bytes: u64,
+    pub decode_wait_ms: f32,
+    pub decode_cpu_ms: f32,
+    pub upload_ms: f32,
+    pub pipelines_compiled: u32,
+    pub pipelines_pending: u32,
+    pub pipelines_failed: u32,
+    pub pipelines_retries: u64,
+    pub pending_skips: u64,
+    pub memory_pressure: u8,
+    pub thermal_state: u8,
+    pub thermal_cap_fps: u32,
+}
+
 /// The overlay's figures.
 #[derive(Clone, Default)]
 pub struct Snapshot {
@@ -36,6 +65,26 @@ pub struct Snapshot {
     pub submits: u32,
     /// What the renderer holds in textures and buffers, in bytes.
     pub gpu_bytes: u64,
+    pub diag: Diagnostics,
+}
+
+impl Snapshot {
+    /// Computes `(p50, p95, p99, hitches)` from buffered frame intervals, where a hitch
+    /// exceeds `max(p50 * 1.5, p50 + 8.0)`.
+    pub fn percentiles(&self) -> Option<(f32, f32, f32, u32)> {
+        if self.frame_ms.is_empty() {
+            return None;
+        }
+        let mut sorted = self.frame_ms.clone();
+        sorted.sort_by(f32::total_cmp);
+        let at = |q: f64| sorted[((sorted.len() - 1) as f64 * q).round() as usize];
+        let p50 = at(0.5);
+        let p95 = at(0.95);
+        let p99 = at(0.99);
+        let hitch_limit = (p50 * 1.5).max(p50 + 8.0);
+        let hitches = sorted.iter().filter(|&&t| t > hitch_limit).count() as u32;
+        Some((p50, p95, p99, hitches))
+    }
 }
 
 struct Live {
@@ -44,6 +93,8 @@ struct Live {
     gpu_ms: VecDeque<f32>,
     counts: (u32, u32, u32),
     gpu_bytes: u64,
+    diag: Diagnostics,
+    thermal: (u8, u32),
     /// GPU seconds of the frame's batches completed so far.
     #[cfg(target_vendor = "apple")]
     gpu_pending: f64,
@@ -57,6 +108,33 @@ impl Live {
             gpu_ms: VecDeque::new(),
             counts: (0, 0, 0),
             gpu_bytes: 0,
+            diag: Diagnostics {
+                tex_bytes: 0,
+                tex_budget_bytes: 0,
+                buf_bytes: 0,
+                metal_allocated_bytes: 0,
+                slabs_used_bytes: 0,
+                slabs_total_bytes: 0,
+                staging_bytes: 0,
+                tex_hits: 0,
+                tex_misses: 0,
+                tex_evictions: 0,
+                tex_reloads: 0,
+                pending_decodes: 0,
+                pending_decode_bytes: 0,
+                decode_wait_ms: 0.0,
+                decode_cpu_ms: 0.0,
+                upload_ms: 0.0,
+                pipelines_compiled: 0,
+                pipelines_pending: 0,
+                pipelines_failed: 0,
+                pipelines_retries: 0,
+                pending_skips: 0,
+                memory_pressure: 0,
+                thermal_state: 0,
+                thermal_cap_fps: 0,
+            },
+            thermal: (0, 0),
             #[cfg(target_vendor = "apple")]
             gpu_pending: 0.0,
         }
@@ -83,6 +161,9 @@ pub(crate) fn on() -> bool {
 
 pub fn snapshot() -> Snapshot {
     let live = LIVE.lock().unwrap();
+    let mut diag = live.diag;
+    diag.thermal_state = live.thermal.0;
+    diag.thermal_cap_fps = live.thermal.1;
     Snapshot {
         frame_ms: live.frame_ms.iter().copied().collect(),
         render_ms: live.render_ms.iter().copied().collect(),
@@ -91,7 +172,13 @@ pub fn snapshot() -> Snapshot {
         passes: live.counts.1,
         submits: live.counts.2,
         gpu_bytes: live.gpu_bytes,
+        diag,
     }
+}
+
+/// Updates platform thermal telemetry shown in the performance overlay.
+pub fn set_thermal(state: u8, cap_fps: u32) {
+    LIVE.lock().unwrap().thermal = (state, cap_fps);
 }
 
 /// The renderer's counters at the last frame, to take the next one's from.
@@ -142,6 +229,10 @@ impl Mark {
 
 pub(crate) fn gpu_bytes(bytes: u64) {
     LIVE.lock().unwrap().gpu_bytes = bytes;
+}
+
+pub(crate) fn set_diagnostics(diag: Diagnostics) {
+    LIVE.lock().unwrap().diag = diag;
 }
 
 #[cfg(not(target_vendor = "apple"))]
@@ -380,5 +471,24 @@ pub(crate) fn timestamps_done(data: &[u8], pairs: u32, period: f32) {
         .sum();
     if on() {
         gpu_frame((ns / 1e6) as f32);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn snapshot_percentiles_and_hitch_detection() {
+        let mut s = Snapshot::default();
+        assert_eq!(s.percentiles(), None);
+        // 19 frames steady ~16.5 ms plus 2 clear hitches (45 ms, 72 ms).
+        s.frame_ms = vec![16.5; 19];
+        s.frame_ms.extend([45.0, 72.0]);
+        let (p50, p95, p99, hitches) = s.percentiles().unwrap();
+        assert!((p50 - 16.5).abs() < 0.01);
+        assert!(p95 >= 45.0);
+        assert!(p99 >= 45.0);
+        assert_eq!(hitches, 2);
     }
 }

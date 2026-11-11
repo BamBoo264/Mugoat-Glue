@@ -76,61 +76,75 @@ Before applying Mugoat Glue fixes, upstream GLUE 5 (`76e6770`) already implement
 
 ---
 
-## 4. Verified Root Causes & Planned Fixes per Subsystem
+## 4. Verified Root Causes & Implemented Fixes per Subsystem
 
 ### 1) GPU Recycler Stale-Entry Ordering (`fix/gpu-recycler-order`, commit `30f56ca`)
 - **Files / Symbols**: `crates/glue5-gpu/src/recycle.rs` (`Recycler::keep_texture`, `Recycler::texture`, `Recycler::trim`), `crates/glue5-gpu/src/exec.rs`.
-- **Finding**: Age queue matched recycled entries by descriptor + destruction epoch; reused handles left stale head entries that could evict live entries sharing the epoch. `30f56ca` introduced unique tickets in `Recycler::trim`.
+- **Root Cause & Fix**: Age queue matched recycled entries by descriptor + destruction epoch; reused handles left stale head records that could evict live entries sharing the epoch. Introduced unique monotonically increasing tickets checked by `Recycler::trim`.
 
 ### 2) Memory Guard, Heap Accounting & Slab Retention (`fix/memory-guard`)
 - **Files / Symbols**:
   - `crates/glue5-runtime/src/imports.rs` (`wasm_module_int_js` -> `gameResourceMB`, `budget_resource_heap`)
-  - `crates/glue5-runtime/src/memory.rs` (`RESOURCE_BUDGET`, `over_budget`, `memory_available`, `largest_block`, `grow_heap`, `buddy_free`, `give_back`)
-  - `crates/glue5-gpu/src/slabs.rs` (`Slabs`)
-  - `crates/glue5/src/settings.rs` (`Settings::apply_graphics_preset`, `LOW_MEMORY_RAM_MB`)
-- **Root Causes**:
-  - `memory_available` / `largest_block` / `grow_heap` only enforce `RESOURCE_BUDGET` (`gameResourceMB`, 768 MiB on `low_memory`), ignoring real iOS process memory availability (`os_proc_available_memory()` / `task_vm_info.phys_footprint`) and live Metal/wgpu GPU pool consumption.
-  - No two-threshold hysteresis guard (`reserve` + `band` + cooldown nudge like `gta5-ios-port`'s `NativeMemoryBudget.h`), causing abrupt cliff behavior and thrashing between evictions and allocations.
-  - `buddy_free` only returns pages in segments above `budget`, leaving freed blocks inside lower segments un-reclaimed under pressure; `Slabs` (`slabs.rs`) holds 4 MiB chunks indefinitely even when completely empty.
-  - `settings.rs` uses raw `sdl3::cpuinfo::system_ram() < 7000`, misclassifying 6 GB iPhones whose usable Jetsam cap is ~3.1–3.8 GB under Medium+ presets.
+  - `crates/glue5-runtime/src/memory.rs` (`MemoryProfile`, `MemoryGuard`, `GpuMemoryStats`, `memory_available`, `largest_block`, `grow_heap`, `buddy_free`, `give_back`, `note_low_memory_warning`)
+  - `crates/glue5-gpu/src/slabs.rs` (`SlabPool`, `Slabs::reclaim_empty`), `crates/glue5-gpu/src/uploads.rs` (`staging_keep_limit`), `crates/glue5-gpu/src/exec.rs` (`Exec::trim`, `Exec::sync_memory_telemetry`), `crates/glue5-gpu/src/present.rs`, `crates/glue5/src/settings.rs`, `crates/glue5/src/app.rs`
+- **Root Causes & Fixes**:
+  - Original guard only enforced virtual `RESOURCE_BUDGET` without checking live iOS `os_proc_available_memory()`, Metal allocation size, or GPU texture pool occupancy, and lacked hysteresis (causing eviction/allocation oscillation).
+  - Implemented `MemoryProfile::detect()` (physical RAM via `sysctlbyname` / `/proc/meminfo` + live process limit + env overrides `GLUE5_MEMORY_PROFILE` / `GLUE5_RESOURCE_BUDGET_MB` / `GLUE5_GUARD_RESERVE_MB` / `GLUE5_GUARD_BAND_MB` / `GLUE5_TEX_POOL_BUDGET_MB`), two-threshold hysteresis `MemoryGuard` (`reserve` + `band` + hold nudge + trim request), and lock-free `GpuMemoryStats` telemetry bridge.
+  - Extended `buddy_free` to return multi-page blocks inside `RESOURCE_HEAP` and `PHYSICAL_HEAP` via `MADV_FREE_REUSABLE` during elevated/critical pressure while keeping nominal path fast.
+  - Added per-chunk `active_slots` tracking in `Slabs` so completely empty finished 4 MiB chunks are released in `Exec::trim()`.
+  - Updated `Settings::apply_graphics_preset` to check `MemoryProfile::detect().recommends_low_memory()` alongside raw RAM, and wired `Event::AppLowMemory` to `note_low_memory_warning()`.
 
 ### 3) Texture Streaming, Cancellation & Eviction/Reload Thrashing (`fix/texture-streaming`)
-- **Files / Symbols**: `crates/glue5-gpu/src/exec.rs` (`Exec::create_texture`, `Exec::upload_texture`, `Exec::finish_decodes`, `Exec::destroy`, `Decode`, `Tex`).
-- **Root Causes**:
-  - `create_texture` drops only `1` mip level statically on `!BC` `>= 512` 2D textures; there is no dynamic 2-mip backoff on large sampled world textures (`>= 512` / `>= 1024`) when memory pressure rises.
-  - `destroy` removes `Decode` entries matching `id` from `self.decodes`, but already-enqueued closures on `Pool("gpu decode")` lack a cancellation token and still decode/encode dead textures, burning CPU cores and temporary memory.
-  - No in-flight byte budget or priority split between small/lower mip chains and huge top mips, allowing burst uploads to stall visible nearby road/ground mips.
-  - Zero telemetry for texture pool used/budget/free bytes, eviction count, reload count, or cache hit rate.
+- **Files / Symbols**: `crates/glue5-gpu/src/exec.rs` (`Exec::create_texture`, `compute_mip_drop`, `Exec::upload_texture`, `Exec::finish_decodes`, `Exec::destroy`, `Decode`), `crates/glue5-gpu/src/recycle.rs` (`ReloadDetector`, `TexSignature`, `effective_max_bytes`).
+- **Root Causes & Fixes**:
+  - `create_texture` statically dropped only `1` mip level on `!BC` `>= 512` 2D textures; `destroy()` removed `Decode` from `self.decodes` without cancelling in-flight decode work, and all decodes shared one FIFO queue (`urgent`) without separating large top mips from small/urgent mips.
+  - Added cooperative cancellation (`Arc<AtomicBool>`), split small/lower mips (`urgent`) vs large top mips (`background`), implemented dynamic `compute_mip_drop()` (up to 2 mips on large sampled world textures under `Compact` tier / pressure while preserving UI `< 512` and all render/depth/UAV targets), bounded `create_texture` failure recovery via recycler flush + 1-step mip backoff, and `ReloadDetector` reload/eviction/hit-rate tracking.
 
 ### 4) Texture Compression & CPU Conversion Path (`perf/texture-upload`)
-- **Files / Symbols**: `crates/glue5-gpu/src/lib.rs` (`WANTED_FEATURES`), `crates/glue5-gpu/src/format.rs` (`decoded`), `crates/glue5-gpu/src/bc.rs` (`compress`, `decode_etc2`, `BC4`/`BC5`), `crates/glue5-gpu/src/exec.rs` (`Upload::A8`, `Upload::Unorm16`).
-- **Root Causes**:
-  - `WANTED_FEATURES` omits `wgpu::Features::TEXTURE_COMPRESSION_ASTC` (natively supported across Apple2+ iOS Metal GPUs).
-  - On pre-A17 iPhones (`!TEXTURE_COMPRESSION_BC`), `format.rs` maps `BC4 -> R8Unorm` (2x VRAM), `BC5 -> Rg8Unorm` (2x VRAM), and `BC1/2/3/7 -> Etc2Rgba8Unorm[_sRGB]` (2x VRAM for opaque/1-bit `BC1`), inflating VRAM and decode time.
-  - `bc.rs` allocates full-image `Vec<u8>` RGBA intermediates (`w * h * 4`), performs full-buffer R/B swizzle, AND spawns nested `std::thread::scope` OS threads per mip inside the 2-worker `Pool("gpu decode")` — creating avoidable allocations and thread contention while `ASTC 4x4` bit-transcoding (for `BC1`/`BC3`) and `EAC R11`/`RG11` (for `BC4`/`BC5`) / strip processing avoid full-image RGBA buffers.
+- **Files / Symbols**: `crates/glue5-gpu/src/lib.rs` (`WANTED_FEATURES`), `crates/glue5-gpu/src/format.rs` (`decoded`, `TexFormat::uncompressed`), `crates/glue5-gpu/src/bc.rs` (`transcode_astc`, `decode_to_etc2_rgba`, `decode_cancellable`), `crates/glue5-gpu/src/exec.rs` (`Upload::Bc`, `Upload::A8`, `Upload::Unorm16`).
+- **Root Causes & Fixes**:
+  - Requested `wgpu::Features::TEXTURE_COMPRESSION_ASTC` (with `GLUE5_NO_ASTC` debug toggle).
+  - Implemented zero-intermediate direct block bit-transcoding `BC1 -> ASTC 4x4` and `BC3 -> ASTC 4x4` when ASTC is available (`bc1_block_to_astc`, `bc3_block_to_astc`), eliminating multi-MB RGBA intermediates, R/B swizzle passes, and encoder searches.
+  - Replaced full-image RGBA buffering and nested `std::thread::scope` thread churn for remaining `BC2`/`BC7` ETC2 targets with strip-by-strip decoding/compression (`decode_to_etc2_rgba`), and streamlined `Upload::A8` and `Upload::Unorm16` row writes.
 
 ### 5) Shader & Pipeline Compilation, Retry & Target Initialization (`fix/shader-pipeline`)
-- **Files / Symbols**: `crates/glue5-gpu/src/draw.rs` (`Draws::prepare`, `Draws::draw`), `crates/glue5-gpu/src/pipeline.rs` (`Cell`), `crates/glue5-gpu/src/prepare.rs`, `crates/glue5-gpu/src/exec.rs` (`Exec::create_texture`).
-- **Root Causes**:
-  - `draw.rs:558-561` explicitly drops background pipeline compile workers to `Qos::Utility` (efficiency cores on Apple Silicon), stalling unseeded world/road shader compilations while `draw.rs:1164` drops draws unconditionally (`pending_skips`), causing invisible roads and grey buildings while driving.
-  - `pipeline::Cell` uses `OnceLock<Option<Pipe>>`, permanently blacklisting any pipeline after a single failure (`"pipeline failed"`) with no bounded retry.
-  - Newly created `RENDER_ATTACHMENT` / `DEPTH_STENCIL` / `STORAGE_BINDING` textures in `exec.rs` are not deterministically zero-initialized, exposing stale Metal heap contents or NaNs if early passes are skipped while pipelines compile (same failure class as `gta5-ios-port` `GTA-77`).
-  - `pipelines.jsonl` / binary cache loading lacks corrupted-line isolation, versioning checks, and periodic saving of newly encountered recipes mid-session.
+- **Files / Symbols**: `crates/glue5-gpu/src/draw.rs` (`Draws::pipeline_for`, `Draws::draw`), `crates/glue5-gpu/src/pipeline.rs` (`Cell`, `CellPoll`, `parse_known_lines`), `crates/glue5-gpu/src/prepare.rs`, `crates/glue5-gpu/src/exec.rs` (`Exec::create_texture`).
+- **Root Causes & Fixes**:
+  - Removed `Qos::Utility` worker downgrade in `Draws::pipeline_for` so background pipeline compiles retain `Qos::Initiated` and finish promptly without leaving invisible roads/buildings during traversal.
+  - Replaced permanent one-shot `OnceLock<Option<Pipe>>` failure blacklisting with `pipeline::Cell` (`OnceLock<Pipe>` fast path + up to `MAX_PIPELINE_ATTEMPTS = 3` bounded retries with epoch backoff) and added `pending`, `hits`, `misses`, `retries` counters.
+  - Queued deterministic zero clears (`Color::TRANSPARENT` / `depth = 1.0` / `stencil = 0`) on newly created/recycled 2D `RENDER_ATTACHMENT` textures in `create_texture` (merged seamlessly by `ensure_pass` / `CLEAR_RT`), preventing stale Metal heap contents or NaNs when early passes are skipped while pipelines compile.
+  - Added corrupt-line counting/isolation in `known_recipes`.
 
 ### 6) Indirect Draw Validation & Fallback (`fix/indirect-draw-fallback`)
-- **Files / Symbols**: `crates/glue5-gpu/src/draw.rs` (`Draws::draw`, `Draws::dispatch`), `crates/glue5-gpu/src/exec.rs` (`Exec::create_buffer`).
-- **Root Causes**:
-  - `draw.rs:1269-1274` / `1407-1409` submits indirect buffers directly into `wgpu::RenderPass` without validating `BufferUsages::INDIRECT`, 4-byte offset alignment, or `offset + args_bytes <= buf.bytes`, allowing a malformed indirect draw to fail validation for the entire render pass.
-  - Devices with `!caps.indirect` discard `kind >= 4` indirect draws outright (`skip("indirect draw (unsupported by the device)")`) rather than reading mirrored/CPU-shadowed draw args.
+- **Files / Symbols**: `crates/glue5-gpu/src/draw.rs` (`validate_indirect_args`, `parse_indirect_args`, `Draws::draw`), `crates/glue5-gpu/src/exec.rs` (`Exec::create_buffer`).
+- **Root Causes & Fixes**:
+  - Validated `BufferUsages::INDIRECT`, 4-byte offset alignment, and buffer bounds (`16` bytes non-indexed / `20` bytes indexed) plus index alignment before recording indirect draws, preventing malformed draws from poisoning the entire Metal command encoder.
+  - Retained CPU `shadow` copies on `MISC_DRAWINDIRECT_ARGS` buffers when `!caps.indirect` and added direct `parse_indirect_args` fallback execution instead of discarding indirect geometry.
 
 ### 7) Thread Scheduling, GPU Queries & Logging Overhead (`perf/thread-scheduling`)
-- **Files / Symbols**: `crates/glue5-gpu/src/exec.rs` (`Exec::idle`), `crates/glue5-runtime/src/gamelog.rs` (`Repeats`), `crates/glue5-runtime/src/memory.rs`.
-- **Root Causes**:
-  - `exec.rs::idle()` waits up to `IDLE_BATCH` before flushing pending occlusion/query work unless readbacks are waiting, introducing avoidable query completion stalls.
-  - `gamelog::Repeats` calls `self.0.clear()` on the entire 50,000-entry map when full, creating periodic burst log spikes and repeated heap churn.
+- **Files / Symbols**: `crates/glue5-gpu/src/exec.rs` (`Exec::idle`), `crates/glue5-runtime/src/gamelog.rs` (`Repeats`), `crates/glue5-gpu/src/lib.rs` (`log_rate_limited`).
+- **Root Causes & Fixes**:
+  - Flushed pending GPU queries (`occlusion.pending` / `Work::Query` / `Work::Store`) immediately as `"idle (query)"` when the command ring drains empty instead of waiting out `IDLE_BATCH`.
+  - Replaced whole-map `self.0.clear()` in `gamelog::Repeats` with a 2-generation rotating map preserving hot spam suppression counts across generation boundaries.
 
 ### 8) Thermal Scaling, Frame Pacing & Developer Diagnostics (`perf/frame-pacing`)
-- **Files / Symbols**: `crates/glue5/src/app.rs` (`App::watch_thermal`, `App::set_frame_rate`), `crates/glue5-gpu/src/perf.rs` (`Snapshot`, `Live`), `crates/glue5/src/ui/perf.rs` (`PerfHud`, `Figures`).
-- **Root Causes**:
-  - `App::watch_thermal()` polls `NSProcessInfo.processInfo().thermalState()` every second and only logs transitions; it never steps FPS caps or triggers pressure relief during sustained `.serious` / `.critical` thermals.
-  - `perf::Snapshot` & `PerfHud` omit frame-time percentiles (`p50`/`p95`/`p99`), hitch counts, process/engine/Metal memory breakdown, texture pool utilization, eviction/reload counts, decode/upload wait times, `pending_skips`, and thermal state.
+- **Files / Symbols**: `crates/glue5-runtime/src/frame_pace.rs` (`ThermalPolicy`, `set_thermal_cap`), `crates/glue5/src/app.rs` (`App::watch_thermal`, `App::effective_max_fps`), `crates/glue5-gpu/src/perf.rs` (`Diagnostics`, `Snapshot::percentiles`), `crates/glue5-gpu/src/present.rs`, `crates/glue5/src/ui/perf.rs` (`PerfHud`).
+- **Root Causes & Fixes**:
+  - Upgraded `App::watch_thermal()` with hysteresis `ThermalPolicy` (`Serious >= 3s -> 40 FPS`, `Critical -> 30 FPS + trim()`, 15s cooldown recovery) feeding both `Presentation::set_frame_rate` and host `frame_pace` without mutating user settings.
+  - Extended `OverlayDetail::Full` in `PerfHud` with `p50/p95/p99` & hitch counts, texture pool occupancy/hit%/reloads, decode wait/staging MB, pending/skipped/failed pipelines, thermal tier, memory pressure tier, and Metal allocated MB.
+
+---
+
+## 5. Texture Format Support & Upload Conversion Matrix
+
+| Source (DXGI / Game) | Native BC Devices (`TEXTURE_COMPRESSION_BC`, A17 Pro+) | `!BC` + ASTC + ETC2 Devices (iPhone 11–15, Metal) | `!BC` + ETC2 Only (`!ASTC`) | Fallback (`!BC`, `!ETC2`, `!ASTC`, 3D, or `% 4 != 0`) | Memory Multiplier (`!BC` ASTC/ETC2 vs BC) | CPU Decode / Transcode Cost |
+|---|---|---|---|---|---|---|
+| `BC1` / `BC1_sRGB` (0.5 BPP) | `Bc1RgbaUnorm[_sRGB]` (`Upload::Direct`) | `Astc { B4x4, Unorm[_sRGB] }` (`transcode_astc`) | `Etc2Rgba8Unorm[_sRGB]` (strip) | `Rgba8Unorm[_sRGB]` | **2.0x** (16 B/blk vs 8 B/blk); **1.0x** on native BC; mip backoff saves 4x–16x on `>= 512` | Very low (`bc1_block_to_astc`, zero RGBA buffer) |
+| `BC2` / `BC2_sRGB` (1.0 BPP) | `Bc2RgbaUnorm[_sRGB]` (`Upload::Direct`) | `Etc2Rgba8Unorm[_sRGB]` (`decode_to_etc2_rgba`) | `Etc2Rgba8Unorm[_sRGB]` (strip) | `Rgba8Unorm[_sRGB]` | **1.0x** (16 B/blk) | Medium (4-row L1 strip decode + compress) |
+| `BC3` / `BC3_sRGB` (1.0 BPP) | `Bc3RgbaUnorm[_sRGB]` (`Upload::Direct`) | `Astc { B4x4, Unorm[_sRGB] }` (`transcode_astc`) | `Etc2Rgba8Unorm[_sRGB]` (strip) | `Rgba8Unorm[_sRGB]` | **1.0x** (16 B/blk) | Low (`bc3_block_to_astc` fast flat path, zero RGBA buffer) |
+| `BC4` (0.5 BPP) | `Bc4RUnorm` (`Upload::Direct`) | `R8Unorm` (`decode_cancellable`) | `R8Unorm` | `R8Unorm` | **2.0x** (lossless normal/height masks) | Low (4x4 BC4 decode, cancellable) |
+| `BC5` (1.0 BPP) | `Bc5RgUnorm` (`Upload::Direct`) | `Rg8Unorm` (`decode_cancellable`) | `Rg8Unorm` | `Rg8Unorm` | **2.0x** (lossless tangent normals) | Low (BC5 decode, cancellable) |
+| `BC6H` (1.0 BPP HDR) | `Bc6hRgbUfloat` (`Upload::Direct`) | `Rgba16Float` (`decode_cancellable`) | `Rgba16Float` | `Rgba16Float` | **8.0x** (float HDR) | Medium (`bc6h_half`, cancellable) |
+| `BC7` / `BC7_sRGB` (1.0 BPP) | `Bc7RgbaUnorm[_sRGB]` (`Upload::Direct`) | `Etc2Rgba8Unorm[_sRGB]` (`decode_to_etc2_rgba`) | `Etc2Rgba8Unorm[_sRGB]` (strip) | `Rgba8Unorm[_sRGB]` | **1.0x** (16 B/blk) | Medium-High (4-row strip buffer, no nested threads) |
+| `A8` / `Unorm16` | Direct or expanded row conversion (`Upload::A8` / `Unorm16`) | `Rgba8Unorm` / `Rgba16Float` (or `16BIT_NORM`) | Same | Same | 4x (`A8`) / 1x (`Unorm16`) | Low (pre-sized slice loops) |
+

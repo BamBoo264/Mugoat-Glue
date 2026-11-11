@@ -16,7 +16,7 @@ use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use egui::{Align2, Color32, FontId, Id, LayerId, Order, Pos2, Rect, Shape, Stroke, pos2, vec2};
-use glue5_gpu::perf::Snapshot;
+use glue5_gpu::perf::{Diagnostics, Snapshot};
 
 use super::Status;
 use crate::settings::{Corner, OverlayDetail, Settings, Upscaling};
@@ -60,12 +60,14 @@ struct Figures {
     /// in it all.
     frame: Option<f32>,
     longest: f32,
+    percentiles: Option<(f32, f32, f32, u32)>,
     render: Option<f32>,
     gpu: Option<f32>,
     draws: u32,
     passes: u32,
     submits: u32,
     gpu_bytes: u64,
+    diag: Diagnostics,
 }
 
 #[derive(Default)]
@@ -180,7 +182,7 @@ impl PerfHud {
         }
 
         let full = detail == OverlayDetail::Full;
-        let width = if full { 228.0 } else { 204.0 };
+        let width = if full { 256.0 } else { 204.0 };
         // Where a frame's time goes: the engine's main thread, the renderer's
         // thread, the GPU.
         let main = self.threads.main.zip(f.frame).map(|(share, ms)| share / 100.0 * ms);
@@ -192,7 +194,8 @@ impl PerfHud {
         let (w, h) = status.window;
         let scaled = status.back_buffer.filter(|&b| b != (w, h));
         if full {
-            height += 7.0 + ROW * threads as f32 + 7.0 + ROW * (3 + scaled.is_some() as usize) as f32;
+            // 3 base info rows + optional scaler row + 5 developer telemetry rows.
+            height += 7.0 + ROW * threads as f32 + 7.0 + ROW * (8 + scaled.is_some() as usize) as f32;
         }
         let rect = place(safe, settings.overlay_corner, vec2(width, height));
         painter.rect_filled(rect, 6.0, BACKGROUND);
@@ -266,6 +269,76 @@ impl PerfHud {
             None => format!("gpu {}", gb(f.gpu_bytes)),
         };
         row(y, "bộ nhớ", memory, TEXT);
+        y += ROW;
+
+        let d = &f.diag;
+        let pct_text = match f.percentiles {
+            Some((p50, p95, p99, hitches)) => (
+                format!("{p50:.1}/{p95:.1}/{p99:.1}ms · {hitches} khựng"),
+                if hitches > 3 || p99 > budget * 2.0 { BAD } else if hitches > 0 { SLOW } else { GOOD },
+            ),
+            None => ("–".into(), MUTED),
+        };
+        row(y, "p50/95/99", pct_text.0, pct_text.1);
+        y += ROW;
+
+        let total_cache = d.tex_hits + d.tex_misses;
+        let hit_pct = if total_cache > 0 { (d.tex_hits as f32 * 100.0) / total_cache as f32 } else { 0.0 };
+        let pool_color = if d.tex_reloads > 16 || d.memory_pressure >= 3 {
+            BAD
+        } else if d.memory_pressure >= 2 {
+            SLOW
+        } else {
+            TEXT
+        };
+        row(
+            y,
+            "pool tex",
+            format!("{}/{} MB · {hit_pct:.0}% · nạp lại {}", d.tex_bytes >> 20, d.tex_budget_bytes >> 20, d.tex_reloads),
+            pool_color,
+        );
+        y += ROW;
+
+        row(
+            y,
+            "giải mã",
+            format!("{} chờ · {:.1}ms · đệm {} MB", d.pending_decodes, d.decode_wait_ms, d.staging_bytes >> 20),
+            if d.decode_wait_ms > 8.0 { SLOW } else { TEXT },
+        );
+        y += ROW;
+
+        row(
+            y,
+            "pipeline",
+            format!("{} chờ · bỏ {} · lỗi {}", d.pipelines_pending, d.pending_skips, d.pipelines_failed),
+            if d.pending_skips > 0 { SLOW } else { TEXT },
+        );
+        y += ROW;
+
+        let therm_label = match d.thermal_state {
+            0 => "Mát",
+            1 => "Ấm",
+            2 => "Nóng",
+            _ => "Rất nóng",
+        };
+        let cap_info = if d.thermal_cap_fps > 0 {
+            format!(" · {}fps", d.thermal_cap_fps)
+        } else {
+            String::new()
+        };
+        let therm_color = if d.thermal_state >= 3 || d.memory_pressure >= 3 {
+            BAD
+        } else if d.thermal_state >= 2 || d.memory_pressure >= 2 {
+            SLOW
+        } else {
+            GOOD
+        };
+        row(
+            y,
+            "nhiệt/metal",
+            format!("{therm_label}{cap_info} · P{} · {} MB", d.memory_pressure, d.metal_allocated_bytes >> 20),
+            therm_color,
+        );
         rect
     }
 }
@@ -279,12 +352,14 @@ fn figures(s: &Snapshot) -> Figures {
     Figures {
         frame: recent(&s.frame_ms),
         longest: s.frame_ms.iter().copied().fold(0.0, f32::max),
+        percentiles: s.percentiles(),
         render: recent(&s.render_ms),
         gpu: recent(&s.gpu_ms),
         draws: s.draws,
         passes: s.passes,
         submits: s.submits,
         gpu_bytes: s.gpu_bytes,
+        diag: s.diag,
     }
 }
 

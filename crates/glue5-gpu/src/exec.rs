@@ -290,7 +290,7 @@ pub struct Decode {
     rows: u32,
     extent: wgpu::Extent3d,
     row_bytes: u32,
-    bytes_est: u64,
+    pub(crate) bytes_est: u64,
 }
 
 type DecodeJob = Box<dyn FnOnce() -> (Vec<u8>, u64) + Send>;
@@ -1894,5 +1894,47 @@ mod streaming_tests {
             compute_mip_drop(Upload::Direct, wgpu::TextureDimension::D2, 2048, 2048, 11, format::BIND_SRV, MemoryTier::Compact, GuardPressure::Critical, mib(900), mib(1024)),
             0
         );
+    }
+
+    #[test]
+    fn burst_streaming_churn_and_astc_transcode_stress() {
+        // Simulate sustained driving bursts: 64 BC1 128x128 mip chains transcoded to ASTC
+        // interspersed with rapid destroy/recreate reload tracking and pressure mip backoff.
+        let bc1_block = [0x00u8, 0xF8, 0x1F, 0x00, 0xE4, 0xE4, 0xB1, 0x1B];
+        let cols = 32usize;
+        let rows = 32usize;
+        let mut src = Vec::with_capacity(cols * rows * 8);
+        for _ in 0..(cols * rows) {
+            src.extend_from_slice(&bc1_block);
+        }
+        let mut detector = crate::recycle::ReloadDetector::default();
+        let cancel = AtomicBool::new(false);
+        for step in 0..8u64 {
+            let sig = crate::recycle::TexSignature {
+                format: TextureFormat::Astc { block: wgpu::AstcBlock::B4x4, channel: wgpu::AstcChannel::Unorm },
+                dim: wgpu::TextureDimension::D2,
+                width: 1024,
+                height: 1024,
+                layers: 1,
+                mips: 10,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            };
+            if step > 0 {
+                detector.record_destroy(sig, step * 10);
+                assert!(detector.note_create(sig, step * 10 + 5));
+            }
+            let astc = crate::bc::transcode_astc(
+                format::Bc::Bc1,
+                &src,
+                cols * 8,
+                rows,
+                cols,
+                rows,
+                1,
+                &cancel,
+            );
+            assert_eq!(astc.len(), cols * rows * crate::bc::COMPRESSED_4X4_BLOCK_BYTES as usize);
+        }
+        assert_eq!(detector.reloads, 7);
     }
 }

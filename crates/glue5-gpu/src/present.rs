@@ -1164,7 +1164,36 @@ impl Gpu {
             if crate::perf::on() {
                 let st = &self.stats;
                 if self.perf.frame(ms, st.draws, st.passes, st.busy, self.epoch) {
-                    crate::perf::gpu_bytes(self.gpu_bytes().into_iter().sum());
+                    let [tex_bytes, buf_bytes] = self.gpu_bytes();
+                    crate::perf::gpu_bytes(tex_bytes + buf_bytes);
+                    let profile = glue5_runtime::memory::MemoryProfile::detect();
+                    let c = &self.compiler;
+                    crate::perf::set_diagnostics(crate::perf::Diagnostics {
+                        tex_bytes,
+                        tex_budget_bytes: profile.tex_pool_budget_bytes,
+                        buf_bytes,
+                        metal_allocated_bytes: self.metal_allocated_bytes(),
+                        slabs_used_bytes: self.slabs.used,
+                        slabs_total_bytes: self.slabs.bytes(),
+                        staging_bytes: self.uploads.total_bytes(),
+                        tex_hits: self.recycler.tex_hits,
+                        tex_misses: self.recycler.tex_misses,
+                        tex_evictions: self.recycler.tex_evicted,
+                        tex_reloads: self.recycler.reload_detector.reloads,
+                        pending_decodes: self.decodes.len() as u32,
+                        pending_decode_bytes: self.decodes.iter().map(|d| d.bytes_est).sum(),
+                        decode_wait_ms: st.decode_wait.as_secs_f32() * 1000.0,
+                        decode_cpu_ms: st.decode_cpu_us as f32 / 1000.0,
+                        upload_ms: st.upload_us as f32 / 1000.0,
+                        pipelines_compiled: c.compiled.load(std::sync::atomic::Ordering::Relaxed),
+                        pipelines_pending: c.pending.load(std::sync::atomic::Ordering::Relaxed),
+                        pipelines_failed: c.failed.load(std::sync::atomic::Ordering::Relaxed),
+                        pipelines_retries: c.retries.load(std::sync::atomic::Ordering::Relaxed),
+                        pending_skips: st.pending_skips,
+                        memory_pressure: glue5_runtime::memory::pressure_level() as u8,
+                        thermal_state: 0,
+                        thermal_cap_fps: 0,
+                    });
                 }
             }
         }

@@ -35,6 +35,67 @@ const UNLIMITED: f32 = 1.0 / 256.0;
 /// there; iOS runs it for a while before suspending it, failing its GPU
 /// work meanwhile.
 static BACKGROUND: AtomicU32 = AtomicU32::new(0);
+/// Host thermal FPS ceiling (`0` = disabled, use user/engine cap only).
+static THERMAL_MAX_FPS: AtomicU32 = AtomicU32::new(0);
+
+/// Sets an adaptive thermal frame-rate ceiling (`0` disables throttling).
+pub fn set_thermal_cap(fps: u32) {
+    THERMAL_MAX_FPS.store(fps, Ordering::Release);
+}
+
+/// Active thermal frame-rate ceiling (`0` = none).
+pub fn thermal_cap() -> u32 {
+    THERMAL_MAX_FPS.load(Ordering::Acquire)
+}
+
+/// Hysteresis thermal throttle policy for mobile play (`0 nominal .. 3 critical`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ThermalPolicy {
+    active_tier: u8,
+    serious_since_ms: Option<u64>,
+    cool_since_ms: Option<u64>,
+}
+
+impl ThermalPolicy {
+    /// Evaluates thermal state at `now_ms`, returning `(effective_cap_fps, should_trim_gpu)`.
+    /// Does not modify user-saved preferences (`user_max_fps`).
+    pub fn step(&mut self, thermal_state: isize, now_ms: u64, user_max_fps: u32) -> (u32, bool) {
+        let mut trim = false;
+        if thermal_state >= 3 {
+            self.cool_since_ms = None;
+            if self.active_tier < 2 {
+                trim = true;
+            }
+            self.active_tier = 2;
+        } else if thermal_state == 2 {
+            self.cool_since_ms = None;
+            let start = *self.serious_since_ms.get_or_insert(now_ms);
+            if self.active_tier < 1 && now_ms.saturating_sub(start) >= 3_000 {
+                self.active_tier = 1;
+            }
+        } else {
+            self.serious_since_ms = None;
+            if self.active_tier > 0 {
+                let start = *self.cool_since_ms.get_or_insert(now_ms);
+                if now_ms.saturating_sub(start) >= 15_000 {
+                    self.active_tier = 0;
+                    self.cool_since_ms = None;
+                }
+            }
+        }
+        let tier_cap = match self.active_tier {
+            2 => 30,
+            1 => 40,
+            _ => 0,
+        };
+        let effective = match (tier_cap, user_max_fps) {
+            (0, u) => u,
+            (t, 0) => t,
+            (t, u) => t.min(u),
+        };
+        (effective, trim)
+    }
+}
 
 /// The app went to the background, or came back.
 pub fn set_background(on: bool) {
@@ -61,7 +122,11 @@ pub(crate) unsafe extern "C" fn end_render(env: *mut Env) {
     let tick = f32::from_bits(mem.u32(TICK_SECONDS));
     let hz = (mem.u32(REFRESH) / mem.u32(REFRESH + 4).max(1)) as i32;
     let intervals = mem.i32(INTERVALS);
-    let target = if hz > 0 && intervals > 0 { intervals as f32 / hz as f32 } else { UNLIMITED };
+    let mut target = if hz > 0 && intervals > 0 { intervals as f32 / hz as f32 } else { UNLIMITED };
+    let therm_cap = THERMAL_MAX_FPS.load(Ordering::Acquire);
+    if therm_cap > 0 {
+        target = target.max(1.0 / therm_cap as f32);
+    }
     let elapsed = (now - last) as f32 * tick;
     let wait = 0.95 * target - elapsed;
     if wait.is_nan() || wait <= 0.0 || tick.is_nan() || tick <= 0.0 {
@@ -84,4 +149,26 @@ fn sleep_until(deadline: Instant) {
 /// This module's hooks.
 pub(crate) fn hooks(hooks: &mut glue5_game::Hooks) {
     hooks.end_render = Some(end_render);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn thermal_policy_steps_down_with_hysteresis_and_recovers() {
+        let mut p = ThermalPolicy::default();
+        assert_eq!(p.step(0, 1_000, 60), (60, false));
+        // Brief Serious spike (< 3s) does not immediately jerk framerate.
+        assert_eq!(p.step(2, 2_000, 60), (60, false));
+        // Sustained Serious >= 3s steps cap smoothly to 40 FPS.
+        assert_eq!(p.step(2, 5_500, 60), (40, false));
+        // Momentary drop back to Fair keeps 40 FPS hysteresis active until 15s sustained cool.
+        assert_eq!(p.step(1, 10_000, 60), (40, false));
+        assert_eq!(p.step(0, 26_000, 60), (60, false));
+        // Critical immediately caps to 30 FPS and requests GPU cache trim.
+        assert_eq!(p.step(3, 30_000, 60), (30, true));
+        // User cap lower than thermal cap (e.g. 24) stays respected.
+        assert_eq!(p.step(3, 31_000, 24), (24, false));
+    }
 }
