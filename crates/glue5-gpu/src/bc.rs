@@ -616,7 +616,7 @@ mod tests {
                 let limit = 3usize.pow(n as u32);
                 let key = TRIT_PACK[..limit]
                     .iter()
-                    .position(|&p| (p & ((1 << BITS_FOR[n]) - 1)) == field)
+                    .position(|&p| (p as u32 & ((1u32 << BITS_FOR[n]) - 1)) == field as u32)
                     .unwrap();
                 let mut k = key;
                 for _ in 0..n {
