@@ -101,7 +101,7 @@ pub struct Pipe {
 /// Maximum compile attempts before permanently marking a pipeline invalid.
 pub const MAX_PIPELINE_ATTEMPTS: u8 = 3;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy)]
 pub enum CellPoll<'a> {
     Ready(&'a Pipe),
     Pending,

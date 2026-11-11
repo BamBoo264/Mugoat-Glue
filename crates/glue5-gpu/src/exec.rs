@@ -669,7 +669,7 @@ impl Gpu {
     fn create_texture(&mut self, c: &Command) {
         let (id, dim, w, h, d, mips, array, dxgi, bind, samples) =
             (c.w(0), c.w(1), c.w(2), c.w(3), c.w(4), c.w(5), c.w(6), c.w(7), c.w(8), c.w(9));
-        let mut tf = format::texture(dxgi, bind & format::BIND_DS != 0, &self.caps);
+        let tf = format::texture(dxgi, bind & format::BIND_DS != 0, &self.caps);
         if self.objs.tex(id).is_some() {
             return;
         }
@@ -720,7 +720,7 @@ impl Gpu {
             tex_used,
             profile.tex_pool_budget_bytes,
         );
-        let mut build_params = |drop_lv: u32| {
+        let build_params = |drop_lv: u32| {
             let mut tf_cur = base_tf;
             let gpu_size = wgpu::Extent3d {
                 width: (size.width >> drop_lv).max(1),
