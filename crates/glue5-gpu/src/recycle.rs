@@ -59,10 +59,11 @@ impl Object {
 pub struct Recycler {
     /// Batches (epochs) the GPU has finished, from the submit thread.
     pub finished: Arc<AtomicU64>,
-    /// Kept objects by description, oldest first: (epoch destroyed, object, bytes).
-    kept: FxHashMap<Key, VecDeque<(u64, Object, u64)>>,
+    /// Kept objects by description, oldest first: (ticket, epoch destroyed, object, bytes).
+    kept: FxHashMap<Key, VecDeque<(u64, u64, Object, u64)>>,
     /// Everything kept, in the order it came (some taken since).
-    order: VecDeque<(u64, Key)>,
+    order: VecDeque<(u64, u64, Key)>,
+    next_ticket: u64,
     bytes: u64,
     pub reused: u64,
 }
@@ -95,17 +96,17 @@ impl Recycler {
 
     /// Hands what is too old, or over the budget, to the graveyard.
     pub fn trim(&mut self, epoch: u64, graveyard: &mut Vec<Grave>) {
-        while let Some(&(at, _)) = self.order.front() {
-            if self.bytes <= MAX_BYTES && epoch.saturating_sub(at) <= MAX_AGE {
+        while let Some((ticket, at, key)) = self.order.front() {
+            let live = self.kept.get(key).and_then(|list| list.front()).is_some_and(|entry| entry.0 == *ticket);
+            if live && self.bytes <= MAX_BYTES && epoch.saturating_sub(*at) <= MAX_AGE {
                 break;
             }
-            let (at, key) = self.order.pop_front().unwrap();
-            let Some(list) = self.kept.get_mut(&key) else { continue };
-            // Taken since: its record is stale.
-            if list.front().is_none_or(|(e, ..)| *e != at) {
+            let (_, _, key) = self.order.pop_front().unwrap();
+            if !live {
                 continue;
             }
-            let (_, object, bytes) = list.pop_front().unwrap();
+            let list = self.kept.get_mut(&key).unwrap();
+            let (_, _, object, bytes) = list.pop_front().unwrap();
             if list.is_empty() {
                 self.kept.remove(&key);
             }
@@ -118,17 +119,17 @@ impl Recycler {
     /// its bytes.
     pub fn release(&mut self, graveyard: &mut Vec<Grave>) -> u64 {
         self.order.clear();
-        graveyard.extend(self.kept.drain().flat_map(|(_, list)| list).map(|(_, object, _)| object.grave()));
+        graveyard.extend(self.kept.drain().flat_map(|(_, list)| list).map(|(_, _, object, _)| object.grave()));
         std::mem::take(&mut self.bytes)
     }
 
     fn take(&mut self, key: &Key) -> Option<Object> {
         let finished = self.finished.load(Ordering::Acquire);
         let list = self.kept.get_mut(key)?;
-        if list.front().is_none_or(|(epoch, ..)| *epoch > finished) {
+        if list.front().is_none_or(|(_, epoch, ..)| *epoch > finished) {
             return None;
         }
-        let (_, object, bytes) = list.pop_front().unwrap();
+        let (_, _, object, bytes) = list.pop_front().unwrap();
         if list.is_empty() {
             self.kept.remove(key);
         }
@@ -138,8 +139,10 @@ impl Recycler {
     }
 
     fn keep(&mut self, epoch: u64, key: Key, object: Object, bytes: u64) {
-        self.kept.entry(key.clone()).or_default().push_back((epoch, object, bytes));
-        self.order.push_back((epoch, key));
+        let ticket = self.next_ticket;
+        self.next_ticket = self.next_ticket.wrapping_add(1);
+        self.kept.entry(key.clone()).or_default().push_back((ticket, epoch, object, bytes));
+        self.order.push_back((ticket, epoch, key));
         self.bytes += bytes;
     }
 }
