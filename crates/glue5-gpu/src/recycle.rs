@@ -22,6 +22,68 @@ use crate::submit::Grave;
 const MAX_BYTES: u64 = 32 << 20;
 /// Kept at most for this many batches (a few seconds).
 const MAX_AGE: u64 = 1000;
+/// Number of recently destroyed sampled textures remembered to spot eviction/reload thrashing.
+const RECENT_DESTROYED_CAP: usize = 256;
+/// Window (in epochs) inside which recreating a recently destroyed texture counts as a reload.
+const RELOAD_WINDOW_EPOCHS: u64 = 240;
+
+fn effective_max_bytes() -> u64 {
+    use glue5_runtime::memory::{GuardPressure, MemoryTier, MemoryProfile, pressure_level};
+    match pressure_level() {
+        GuardPressure::Critical => 0,
+        GuardPressure::High => 8 << 20,
+        GuardPressure::Elevated => 16 << 20,
+        GuardPressure::Nominal => match MemoryProfile::detect().tier {
+            MemoryTier::Compact => 16 << 20,
+            _ => MAX_BYTES,
+        },
+    }
+}
+
+/// Lightweight fingerprint of a texture descriptor to detect destroy -> recreate thrashing.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct TexSignature {
+    pub format: TextureFormat,
+    pub dim: TextureDimension,
+    pub width: u32,
+    pub height: u32,
+    pub layers: u32,
+    pub mips: u32,
+    pub usage: TextureUsages,
+}
+
+/// Sliding window of recently destroyed sampled textures to detect reload thrashing.
+#[derive(Default)]
+pub struct ReloadDetector {
+    recent: VecDeque<(TexSignature, u64)>,
+    pub reloads: u64,
+}
+
+impl ReloadDetector {
+    pub fn record_destroy(&mut self, sig: TexSignature, epoch: u64) {
+        while self.recent.len() >= RECENT_DESTROYED_CAP {
+            self.recent.pop_front();
+        }
+        self.recent.push_back((sig, epoch));
+    }
+
+    /// Returns true when a matching texture was destroyed recently within `RELOAD_WINDOW_EPOCHS`.
+    pub fn note_create(&mut self, sig: TexSignature, epoch: u64) -> bool {
+        while let Some(&(_, at)) = self.recent.front() {
+            if epoch.saturating_sub(at) <= RELOAD_WINDOW_EPOCHS {
+                break;
+            }
+            self.recent.pop_front();
+        }
+        if let Some(pos) = self.recent.iter().rposition(|&(s, _)| s == sig) {
+            self.recent.remove(pos);
+            self.reloads += 1;
+            true
+        } else {
+            false
+        }
+    }
+}
 
 /// What a texture is made of; equal descriptions are interchangeable.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -66,6 +128,10 @@ pub struct Recycler {
     next_ticket: u64,
     bytes: u64,
     pub reused: u64,
+    pub tex_hits: u64,
+    pub tex_misses: u64,
+    pub tex_evicted: u64,
+    pub reload_detector: ReloadDetector,
 }
 
 impl Recycler {
@@ -78,10 +144,16 @@ impl Recycler {
     }
 
     pub fn texture(&mut self, key: &TexKey) -> Option<wgpu::Texture> {
-        match self.take(&Key::Texture(key.clone()))? {
-            Object::Texture(t) => Some(t),
-            Object::Buffer(_) => None,
+        let hit = match self.take(&Key::Texture(key.clone())) {
+            Some(Object::Texture(t)) => Some(t),
+            _ => None,
+        };
+        if hit.is_some() {
+            self.tex_hits += 1;
+        } else {
+            self.tex_misses += 1;
         }
+        hit
     }
 
     /// Keeps a buffer the commands of `epoch` may still use.
@@ -96,9 +168,10 @@ impl Recycler {
 
     /// Hands what is too old, or over the budget, to the graveyard.
     pub fn trim(&mut self, epoch: u64, graveyard: &mut Vec<Grave>) {
+        let max_bytes = effective_max_bytes();
         while let Some((ticket, at, key)) = self.order.front() {
             let live = self.kept.get(key).and_then(|list| list.front()).is_some_and(|entry| entry.0 == *ticket);
-            if live && self.bytes <= MAX_BYTES && epoch.saturating_sub(*at) <= MAX_AGE {
+            if live && self.bytes <= max_bytes && epoch.saturating_sub(*at) <= MAX_AGE {
                 break;
             }
             let (_, _, key) = self.order.pop_front().unwrap();
@@ -111,6 +184,9 @@ impl Recycler {
                 self.kept.remove(&key);
             }
             self.bytes -= bytes;
+            if matches!(key, Key::Texture(_)) {
+                self.tex_evicted += 1;
+            }
             graveyard.push(object.grave());
         }
     }
@@ -119,7 +195,12 @@ impl Recycler {
     /// its bytes.
     pub fn release(&mut self, graveyard: &mut Vec<Grave>) -> u64 {
         self.order.clear();
-        graveyard.extend(self.kept.drain().flat_map(|(_, list)| list).map(|(_, _, object, _)| object.grave()));
+        for (key, list) in self.kept.drain() {
+            if matches!(key, Key::Texture(_)) {
+                self.tex_evicted += list.len() as u64;
+            }
+            graveyard.extend(list.into_iter().map(|(_, _, object, _)| object.grave()));
+        }
         std::mem::take(&mut self.bytes)
     }
 
@@ -144,5 +225,38 @@ impl Recycler {
         self.kept.entry(key.clone()).or_default().push_back((ticket, epoch, object, bytes));
         self.order.push_back((ticket, epoch, key));
         self.bytes += bytes;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reload_detector_flags_rapid_recreation_and_expires_old_entries() {
+        let mut detector = ReloadDetector::default();
+        let sig = TexSignature {
+            format: TextureFormat::Rgba8Unorm,
+            dim: TextureDimension::D2,
+            width: 1024,
+            height: 1024,
+            layers: 1,
+            mips: 11,
+            usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
+        };
+        let other = TexSignature { width: 512, ..sig };
+
+        detector.record_destroy(sig, 10);
+        assert!(!detector.note_create(other, 20));
+        assert!(detector.note_create(sig, 50));
+        assert_eq!(detector.reloads, 1);
+
+        // Consuming once does not double-count without another destroy.
+        assert!(!detector.note_create(sig, 55));
+
+        // Expired past RELOAD_WINDOW_EPOCHS no longer counts as thrashing.
+        detector.record_destroy(sig, 100);
+        assert!(!detector.note_create(sig, 100 + RELOAD_WINDOW_EPOCHS + 1));
+        assert_eq!(detector.reloads, 1);
     }
 }
