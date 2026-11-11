@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+#MISE description="Run unit tests across core workspace crates"
+#MISE depends=["setup"]
+#USAGE arg "[args]..." var=#true help="Passed on to cargo test"
+exec cargo test -p glue5-game -p glue5-gpu -p glue5-mods -p glue5-runtime -p glue5 --lib "$@"

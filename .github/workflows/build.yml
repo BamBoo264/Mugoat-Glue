@@ -31,6 +31,7 @@ jobs:
         shell: bash
     env:
       GH_TOKEN: ${{ github.token }}
+      GITHUB_TOKEN: ${{ github.token }}
       PLATFORM: ${{ inputs.platform }}
       MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}
       # The tools each platform needs are installed below, not all of them.
@@ -133,9 +134,7 @@ jobs:
 
       - name: Test
         if: inputs.platform == 'ios' || inputs.platform == 'macos' || inputs.platform == 'windows'
-        run: |
-          mise run setup
-          mise exec -- cargo test -p glue5-game -p glue5-gpu -p glue5-mods -p glue5-runtime -p glue5 --lib
+        run: mise run test:core
 
       - name: Build
         run: |
