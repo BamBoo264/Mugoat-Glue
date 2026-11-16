@@ -26,7 +26,9 @@ input.onKey(function(key, down)
 		return
 	end
 	for _, a in actions do
-		if prefs.data.keys[a.name] == key then
+		if a.name == "menu" and (key == "F4" or key == "F8") then
+			a.run()
+		elseif prefs.data.keys[a.name] == key then
 			a.run()
 		end
 	end

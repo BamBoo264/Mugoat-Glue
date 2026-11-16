@@ -69,6 +69,7 @@ enum Node {
     Stdout,
     Stderr,
     File(File),
+    ModArchive { file: File, archive: Arc<crate::game_mods::ModArchive> },
     Dir(PathBuf),
     Null,
     Random,
@@ -112,6 +113,7 @@ pub struct Vfs {
     /// The game's files' dates as its manifest lists them, which the engine
     /// is told rather than the copy's (see `glue5_stream::catalog::game_dates`).
     game_dates: HashMap<String, (u64, u64)>,
+    mods: Arc<crate::game_mods::GameMods>,
     user: PathBuf,
     scratch: PathBuf,
     fds: Mutex<Vec<Option<Arc<Open>>>>,
@@ -120,10 +122,19 @@ pub struct Vfs {
 pub struct Host {
     path: PathBuf,
     read_only: bool,
+    archive: Option<Arc<crate::game_mods::ModArchive>>,
 }
 
 impl Vfs {
     pub fn new(game_data: Option<PathBuf>, user: PathBuf) -> io::Result<Self> {
+        Self::with_mods(game_data, user, Arc::new(crate::game_mods::GameMods::empty()))
+    }
+
+    pub fn with_mods(
+        game_data: Option<PathBuf>,
+        user: PathBuf,
+        mods: Arc<crate::game_mods::GameMods>,
+    ) -> io::Result<Self> {
         raise_open_file_limit();
         let scratch = user.join("fsroot");
         fs::create_dir_all(&scratch)?;
@@ -144,10 +155,15 @@ impl Vfs {
             game: game_data,
             game_index,
             game_dates,
+            mods,
             user,
             scratch,
             fds: Mutex::new(vec![std_fd(Node::Stdin), std_fd(Node::Stdout), std_fd(Node::Stderr)]),
         })
+    }
+
+    pub(crate) fn mod_archive(&self, rel: &str) -> Option<&Arc<crate::game_mods::ModArchive>> {
+        self.mods.archive(rel)
     }
 
     /// Maps an absolute engine path to the host.
@@ -167,19 +183,27 @@ impl Vfs {
             // (Once: `/game/gameconfig.xml` is `gameconfig.xml`.)
             let rel = path.strip_prefix("/game").unwrap_or("").trim_start_matches('/');
             if rel.is_empty() {
-                return Ok(Host { path: game.clone(), read_only: true });
+                return Ok(Host { path: game.clone(), read_only: true, archive: None });
             }
-            let real = self.game_index.get(&rel.to_ascii_lowercase()).map_or(rel, String::as_str);
-            let real = game.join(real);
-            let path = crate::overlay::game_file(rel, &real, &self.scratch).unwrap_or(real);
-            return Ok(Host { path, read_only: true });
+            let lower = rel.to_ascii_lowercase();
+            let real = self.mods.loose_file(&lower).cloned().unwrap_or_else(|| {
+                let real = self.game_index.get(&lower).map_or(rel, String::as_str);
+                game.join(real)
+            });
+            let archive = self.mods.archive(&lower).cloned();
+            let path = if archive.is_some() {
+                real
+            } else {
+                crate::overlay::game_file(rel, &real, &self.scratch).unwrap_or(real)
+            };
+            return Ok(Host { path, read_only: true, archive });
         }
         if let Some(rel) = path.strip_prefix("/userdata")
             && (rel.is_empty() || rel.starts_with('/'))
         {
-            return Ok(Host { path: self.user.join(rel.trim_start_matches('/')), read_only: false });
+            return Ok(Host { path: self.user.join(rel.trim_start_matches('/')), read_only: false, archive: None });
         }
-        Ok(Host { path: self.scratch.join(path.trim_start_matches('/')), read_only: false })
+        Ok(Host { path: self.scratch.join(path.trim_start_matches('/')), read_only: false, archive: None })
     }
 
     /// Joins a path given relative to `dirfd` (`AT_FDCWD` = -100; cwd is `/`).
@@ -225,7 +249,10 @@ impl Vfs {
                     .create(flags & oflag::CREAT != 0)
                     .open(&host.path)
                     .map_err(io_errno)?;
-                Node::File(file)
+                match host.archive {
+                    Some(archive) => Node::ModArchive { file, archive },
+                    None => Node::File(file),
+                }
             }
         };
         self.add(node, path, flags)
@@ -277,6 +304,15 @@ impl Vfs {
                     Ok(n)
                 }
             },
+            Node::ModArchive { file, archive } => match offset {
+                Some(off) => archive.read_at(file, off, buf).map_err(io_errno),
+                None => {
+                    let mut pos = open.pos.lock().unwrap();
+                    let n = archive.read_at(file, *pos, buf).map_err(io_errno)?;
+                    *pos += n as u64;
+                    Ok(n)
+                }
+            },
             Node::Stdin | Node::Null => Ok(0),
             Node::Random => getrandom::fill(buf).map(|()| buf.len()).map_err(|_| errno::IO),
             Node::Dir(_) => Err(errno::ISDIR),
@@ -310,7 +346,7 @@ impl Vfs {
             }
             Node::Null | Node::Random => Ok(buf.len()),
             Node::Dir(_) => Err(errno::ISDIR),
-            Node::Stdin => Err(errno::BADF),
+            Node::Stdin | Node::ModArchive { .. } => Err(errno::BADF),
         }
     }
 
@@ -323,6 +359,18 @@ impl Vfs {
                     0 => 0,
                     1 => *pos as i64,
                     2 => f.metadata().map_err(io_errno)?.len() as i64,
+                    _ => return Err(errno::INVAL),
+                };
+                let new = from.checked_add(offset).filter(|&p| p >= 0).ok_or(errno::INVAL)?;
+                *pos = new as u64;
+                Ok(*pos)
+            }
+            Node::ModArchive { archive, .. } => {
+                let mut pos = open.pos.lock().unwrap();
+                let from = match whence {
+                    0 => 0,
+                    1 => *pos as i64,
+                    2 => archive.virtual_size as i64,
                     _ => return Err(errno::INVAL),
                 };
                 let new = from.checked_add(offset).filter(|&p| p >= 0).ok_or(errno::INVAL)?;
@@ -364,6 +412,11 @@ impl Vfs {
         let open = self.get(fd)?;
         match &open.node {
             Node::File(f) => Ok(self.stat_of(&open.path, &f.metadata().map_err(io_errno)?)),
+            Node::ModArchive { file, archive } => {
+                let mut st = self.stat_of(&open.path, &file.metadata().map_err(io_errno)?);
+                st.size = archive.virtual_size;
+                Ok(st)
+            }
             Node::Dir(p) => Ok(self.stat_of(&open.path, &fs::metadata(p).map_err(io_errno)?)),
             _ => Ok(Stat { ino: fd as u64, ..DEVICE_STAT }),
         }
@@ -375,7 +428,11 @@ impl Vfs {
         }
         let host = self.resolve(path)?;
         let meta = if follow { fs::metadata(&host.path) } else { fs::symlink_metadata(&host.path) };
-        Ok(self.stat_of(&normalize(path), &meta.map_err(io_errno)?))
+        let mut st = self.stat_of(&normalize(path), &meta.map_err(io_errno)?);
+        if let Some(archive) = host.archive {
+            st.size = archive.virtual_size;
+        }
+        Ok(st)
     }
 
     /// What `stat` reports of the file at engine path `path` (normalized):

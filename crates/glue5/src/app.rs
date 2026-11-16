@@ -234,6 +234,7 @@ pub fn run() -> Result<()> {
         drivers,
         driver_pick: None,
         driver_adding: None,
+        vehicle_pick: None,
         game_dir: None,
         problem: None,
         stream: None,
@@ -434,6 +435,8 @@ struct App {
     /// The file picker for a driver package, then its unpacking.
     driver_pick: Option<Pick>,
     driver_adding: Option<std::thread::JoinHandle<Result<drivers::Package, String>>>,
+    /// The file picker for vehicle mods (.zip, .rar, .7z, .oiv).
+    vehicle_pick: Option<Pick>,
     /// The game's folder, once found.
     game_dir: Option<PathBuf>,
     /// Why it was not, or a folder chosen that is not one.
@@ -811,6 +814,7 @@ impl App {
         if in_game || (!self.lifecycle.background.load(Ordering::Relaxed) && self.ui.wants_frame()) {
             let status = Status {
                 game_dir: self.game_dir.as_deref(),
+                user_dir: &self.user_dir,
                 problem: self.problem.as_deref(),
                 started: self.game.as_ref().map(|g| &g.started),
                 last_failure: self.last_failure.as_deref(),
@@ -902,9 +906,50 @@ impl App {
                         d.packages = drivers::list(&self.user_dir);
                     }
                 }
+                Action::ImportVehicleMod => self.vehicle_pick = Some(Pick::vehicle_mod(&self.window)),
+                Action::ToggleVehicleMod { id, enabled } => {
+                    let _ = glue5_runtime::vehicle_mods::set_enabled(&self.user_dir, &id, enabled);
+                    if let Some(gd) = self.game_dir.as_deref().map(glue5_runtime::layout::data_dir) {
+                        glue5_runtime::vehicle_mods::sync_dlclist_overlay(&gd, &self.user_dir);
+                    }
+                }
+                Action::DeleteVehicleMod { id } => {
+                    let _ = glue5_runtime::vehicle_mods::delete_mod(&self.user_dir, &id);
+                    if let Some(gd) = self.game_dir.as_deref().map(glue5_runtime::layout::data_dir) {
+                        glue5_runtime::vehicle_mods::sync_dlclist_overlay(&gd, &self.user_dir);
+                    }
+                }
             }
         }
         self.add_driver();
+        if let Some(choice) = self.vehicle_pick.as_ref().and_then(Pick::poll) {
+            self.vehicle_pick = None;
+            if let Some(archive_path) = choice {
+                let data_dir = self.game_dir.as_deref().map(glue5_runtime::layout::data_dir);
+                let user_dir = self.user_dir.clone();
+                match glue5_runtime::vehicle_mods::import_archive(&archive_path, &user_dir, data_dir.as_deref()) {
+                    Ok(vmod) => {
+                        let note = match vmod.kind {
+                            glue5_runtime::vehicle_mods::VehicleModKind::Addon => {
+                                format!("Đã thêm xe bổ sung: {} (Mã gọi: {})", vmod.title, vmod.models.join(", "))
+                            }
+                            glue5_runtime::vehicle_mods::VehicleModKind::Replace => {
+                                format!("Đã thêm xe thay thế: {} (Thay: {})", vmod.title, vmod.replaces.join(", "))
+                            }
+                            glue5_runtime::vehicle_mods::VehicleModKind::Package => {
+                                format!("Đã cài đặt gói mod: {}", vmod.title)
+                            }
+                        };
+                        self.ui.vehicles.set_status(note, false);
+                    }
+                    Err(e) => {
+                        self.ui.vehicles.set_status(format!("Lỗi cài đặt mod xe: {e}"), true);
+                    }
+                }
+            } else {
+                self.ui.vehicles.importing = false;
+            }
+        }
         if self.play_requested {
             self.play()?;
         }
@@ -1940,6 +1985,23 @@ impl Pick {
     fn zip(window: &sdl3::video::Window) -> Pick {
         let picked = Picked::default();
         let filters = [sdl3::dialog::DialogFileFilter { name: "Tệp ZIP", pattern: "zip" }];
+        if let Err(e) = sdl3::dialog::show_open_file_dialog(&filters, None::<&str>, false, window, Pick::answer(&picked)) {
+            log::warn!("no file picker: {e:?}");
+            *picked.lock().unwrap() = Some(None);
+        }
+        Pick(picked)
+    }
+
+    /// A vehicle mod archive (.zip, .rar, .7z, .oiv)
+    fn vehicle_mod(window: &sdl3::video::Window) -> Pick {
+        let picked = Picked::default();
+        let filters = [
+            sdl3::dialog::DialogFileFilter {
+                name: "Tệp nén Mod (.zip, .rar, .7z, .oiv)",
+                pattern: "zip;rar;7z;oiv",
+            },
+            sdl3::dialog::DialogFileFilter { name: "Tất cả tệp (*.*)", pattern: "*" },
+        ];
         if let Err(e) = sdl3::dialog::show_open_file_dialog(&filters, None::<&str>, false, window, Pick::answer(&picked)) {
             log::warn!("no file picker: {e:?}");
             *picked.lock().unwrap() = Some(None);

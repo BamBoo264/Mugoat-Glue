@@ -580,6 +580,8 @@ pub(crate) fn hooks(hooks: &mut glue5_game::Hooks) {
     hooks.additional_text_loaded = Some(additional_text_loaded);
     hooks.text_request = Some(text_request);
     hooks.text_free = Some(text_free);
+    hooks.decrypt_packfile_aes = Some(decrypt_packfile_aes);
+    hooks.packfile_reinit = Some(packfile_reinit);
     hooks.script_bank_request = Some(bank_request);
     hooks.bank_loading_status = Some(bank_loading_status);
     hooks.script_named_bank_request = Some(named_bank_request);
@@ -670,4 +672,28 @@ mod tests {
         // Asked, and its load ended without it.
         assert!(failed(false, Some("mpawd"), "MPAWD"));
     }
+}
+
+/// OpenIV archives declare a plaintext directory with the OPEN marker.
+unsafe extern "C" fn decrypt_packfile_aes(env: *mut Env, key_id: u32, data: u64, len: u32) {
+    const OPEN: u32 = u32::from_le_bytes(*b"OPEN");
+    if key_id != OPEN {
+        unsafe { orig::decrypt_packfile_aes(env, key_id, data, len) };
+    }
+}
+
+/// After an RPF7 archive mounts or refreshes its table of contents, point any
+/// modded entries at their 512-byte-aligned slots in [`crate::game_mods`].
+unsafe extern "C" fn packfile_reinit(
+    env: *mut Env,
+    packfile: u64,
+    name: u64,
+    read_only: u32,
+    user_data: u64,
+) -> u32 {
+    let ok = unsafe { orig::packfile_reinit(env, packfile, name, read_only, user_data) };
+    if ok != 0 {
+        crate::game_mods::apply_to_packfile(env, packfile, name);
+    }
+    ok
 }

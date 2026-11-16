@@ -17,7 +17,7 @@ local M = {}
 local function toWaypoint(): string?
 	local at = world.waypoint()
 	if not at then
-		return "Chưa đặt điểm đánh dấu trên bản đồ"
+		return "No waypoint on the map"
 	end
 	game.teleport(at, true)
 	return nil
@@ -40,18 +40,18 @@ local function saved(): { Spot }
 end
 
 local function spots(root: Menu)
-	local menu = root:submenu("Điểm đã lưu", "Tự lưu vị trí đang đứng để quay lại sau")
+	local menu = root:submenu("Saved spots", "Yours: save where you are, come back later")
 	local function build()
 		menu:clear()
 		local list = saved()
-		bind.action(menu, "Lưu tại đây", { note = "Tự đặt tên theo tên đường", action = "Lưu" }, function(): string?
+		bind.action(menu, "Save here", { note = "Named after the street", action = "Save" }, function(): string?
 			local s = saved()
 			table.insert(s, here())
 			storage.set("spots", s)
 			build()
-			return `Đã lưu: {s[#s].name}`
+			return `Saved: {s[#s].name}`
 		end)
-		menu:text("Lưu tại đây với tên", "", { placeholder = "Nhập tên rồi Enter", max = 40 }, bind.safe("Lưu tại đây với tên", function(name)
+		menu:text("Save here as", "", { placeholder = "A name, then Enter", max = 40 }, bind.safe("Save here as", function(name)
 			if name == "" then
 				return
 			end
@@ -59,27 +59,27 @@ local function spots(root: Menu)
 			table.insert(s, here(name))
 			storage.set("spots", s)
 			build()
-			game.notify(`Đã lưu: {name}`)
+			game.notify(`Saved: {name}`)
 		end))
 		if #list == 0 then
-			menu:label("Chưa lưu địa điểm nào.")
+			menu:label("Nothing saved yet.")
 			return
 		end
-		menu:separator("Đi tới")
+		menu:separator("Go")
 		for _, spot in list do
-			bind.action(menu, spot.name, { note = world.zoneName(vector.create(spot.x, spot.y, spot.z)), action = "Đi" }, function(): string?
+			bind.action(menu, spot.name, { note = world.zoneName(vector.create(spot.x, spot.y, spot.z)), action = "Go" }, function(): string?
 				game.teleport(vector.create(spot.x, spot.y, spot.z), false, spot.heading)
 				return nil
 			end)
 		end
-		local forget = menu:submenu("Xóa địa điểm")
+		local forget = menu:submenu("Delete a spot")
 		for i, spot in list do
-			bind.action(forget, spot.name, { action = "Xóa" }, function(): string?
+			bind.action(forget, spot.name, { action = "Delete" }, function(): string?
 				local s = saved()
 				table.remove(s, i)
 				storage.set("spots", s)
 				build()
-				return `Đã xóa: {spot.name}`
+				return `Deleted: {spot.name}`
 			end)
 		end
 	end
@@ -106,15 +106,15 @@ local function objective(): vector?
 end
 
 local function coordinates(root: Menu)
-	local menu = root:submenu("Tọa độ", "Đi tới bất cứ đâu bằng tọa độ số")
+	local menu = root:submenu("Coordinates", "Anywhere, by its numbers")
 	local x = menu:number("X", 0, { step = 10 })
 	local y = menu:number("Y", 0, { step = 10 })
-	local z = menu:number("Z", 0, { step = 5, note = "0: tự động hạ xuống mặt đất" })
-	bind.action(menu, "Đi tới đây", { action = "Đi" }, function(): string?
+	local z = menu:number("Z", 0, { step = 5, note = "0: on the ground" })
+	bind.action(menu, "Go there", { action = "Go" }, function(): string?
 		game.teleport(vector.create(x.value, y.value, z.value), z.value == 0)
 		return nil
 	end)
-	bind.action(menu, "Vị trí hiện tại", { note = "Điền tọa độ nơi bạn đang đứng", action = "Lấy tọa độ" }, function(): string?
+	bind.action(menu, "Where you are", { note = "These numbers, from where you stand", action = "Fill" }, function(): string?
 		local pos = game.position()
 		x.value = math.floor(pos.x * 10 + 0.5) / 10
 		y.value = math.floor(pos.y * 10 + 0.5) / 10
@@ -127,7 +127,7 @@ end
 local function go(place: teleports.Place): string?
 	local o = place.options
 	if o and o.online and not network.networkIsSessionStarted() then
-		return "Địa điểm này chỉ có trên bản đồ GTA Online"
+		return "That place is on GTA Online's map only"
 	end
 	local unload = o and o.unload
 	if unload then
@@ -160,9 +160,9 @@ end
 
 -- To an interior: what it needs loaded first, then there.
 local function interiorsMenu(root: Menu)
-	local menu = root:submenu("Nội thất ẩn", "Các căn phòng bị ẩn cho tới khi làm nhiệm vụ")
+	local menu = root:submenu("Interiors", "Rooms and places the game keeps hidden until a mission")
 	for _, room in interiors do
-		bind.action(menu, room.name, { action = "Đi" }, function(): string?
+		bind.action(menu, room.name, { action = "Go" }, function(): string?
 			for _, ipl in room.ipls do
 				if not streaming.isIplActive(ipl) then
 					streaming.requestIpl(ipl)
@@ -176,7 +176,7 @@ end
 
 -- The map's icons there are now, by kind (sprite), to the nearest of each kind.
 local function icons(root: Menu)
-	local menu = root:submenu("Biểu tượng bản đồ", "Dịch chuyển tới biểu tượng gần nhất trên bản đồ")
+	local menu = root:submenu("Map icons", "The nearest of any icon on the map")
 	local function build()
 		menu:clear()
 		local found = 0
@@ -190,11 +190,11 @@ local function icons(root: Menu)
 					b = hud.getNextBlipInfoId(sprite)
 				end
 				found += 1
-				local name = blips[sprite] or `Biểu tượng {sprite}`
-				bind.action(menu, name, { note = `{count} trên bản đồ`, action = "Đi" }, function(): string?
+				local name = blips[sprite] or `Icon {sprite}`
+				bind.action(menu, name, { note = `{count} on the map`, action = "Go" }, function(): string?
 					local nearest = hud.getClosestBlipInfoId(sprite)
 					if not nearest or not hud.doesBlipExist(nearest) then
-						return "Không còn trên bản đồ nữa"
+						return "It is no longer on the map"
 					end
 					game.teleport(hud.getBlipInfoIdCoord(nearest), true)
 					return nil
@@ -202,26 +202,26 @@ local function icons(root: Menu)
 			end
 		end
 		if found == 0 then
-			menu:label("Hiện chưa có biểu tượng nào trên bản đồ.")
+			menu:label("No icons on the map now.")
 		end
 	end
-	menu:onOpen(bind.safe("Biểu tượng bản đồ", build))
+	menu:onOpen(bind.safe("Map icons", build))
 end
 
 function M.build(root: Menu)
-	local menu = root:submenu("Dịch chuyển", "Điểm đánh dấu, mục tiêu, biểu tượng bản đồ, địa danh, điểm đã lưu")
-	bind.command(menu, "teleport.waypoint", "Tới điểm đánh dấu", { note = "Điểm đặt trên bản đồ (Waypoint)", action = "Đi" }, toWaypoint)
-	bind.command(menu, "teleport.objective", "Tới mục tiêu nhiệm vụ", { note = "Điểm vàng/xanh của nhiệm vụ", action = "Đi" }, function(): string?
+	local menu = root:submenu("Teleport", "Waypoint, objective, map icons, places, interiors, your saved spots")
+	bind.command(menu, "teleport.waypoint", "To the waypoint", { note = "The map's marker", action = "Go" }, toWaypoint)
+	bind.command(menu, "teleport.objective", "To the objective", { note = "Where the mission wants you", action = "Go" }, function(): string?
 		local at = objective()
 		if not at then
-			return "Không có mục tiêu nào trên bản đồ"
+			return "No objective on the map"
 		end
 		game.teleport(at, true)
 		return nil
 	end)
 	-- A new waypoint takes you there (a teleport waits for the ground: a task of its own).
 	local seen: vector? = nil
-	bind.feature(menu, "teleport.auto", "Tự động tới điểm đánh dấu mới", "Đặt mốc trên bản đồ là bay tới ngay", {
+	bind.feature(menu, "teleport.auto", "Go to every new waypoint", "Mark the map, you are there", {
 		on = function()
 			seen = world.waypoint()
 		end,
@@ -233,33 +233,33 @@ function M.build(root: Menu)
 			seen = at
 		end,
 	})
-	bind.command(menu, "teleport.forward", "Tiến về trước", { note = "10 m phía trước, xuyên tường", action = "Đi" }, function(): string?
+	bind.command(menu, "teleport.forward", "Forward", { note = "10 m ahead, through walls", action = "Go" }, function(): string?
 		local e = game.mover()
 		local ahead = entity.getEntityCoords(e, true) + entity.getEntityForwardVector(e) * 10
 		game.teleport(ahead, false)
 		return nil
 	end)
-	bind.command(menu, "teleport.skydive", "Nhảy dù xuống điểm đánh dấu", { note = "Xuất hiện trên không cùng dù lượn", action = "Nhảy" }, function(): string?
+	bind.command(menu, "teleport.skydive", "Skydive to the waypoint", { note = "High above it, with a parachute", action = "Jump" }, function(): string?
 		local at = world.waypoint()
 		if not at then
-			return "Chưa đặt điểm đánh dấu trên bản đồ"
+			return "No waypoint on the map"
 		end
 		weapon.giveWeaponToPed(game.me(), joaat("GADGET_PARACHUTE"), 1, false, false)
 		game.teleport(vector.create(at.x, at.y, 800), false)
 		return nil
 	end)
-	local steps: { { key: string, name: string, by: vector } } = {
-		{ key = "up", name = "Lên trên", by = vector.create(0, 0, 10) },
-		{ key = "down", name = "Xuống dưới", by = vector.create(0, 0, -10) },
-		{ key = "back", name = "Lùi lại", by = vector.create(0, -10, 0) },
+	local steps: { { name: string, by: vector } } = {
+		{ name = "Up", by = vector.create(0, 0, 10) },
+		{ name = "Down", by = vector.create(0, 0, -10) },
+		{ name = "Back", by = vector.create(0, -10, 0) },
 	}
 	for _, step in steps do
-		bind.command(menu, `teleport.{step.key}`, step.name, { note = "10 m, xuyên tường", action = "Đi" }, function(): string?
+		bind.command(menu, `teleport.{string.lower(step.name)}`, step.name, { note = "10 m, through walls", action = "Go" }, function(): string?
 			game.teleportNow(entity.getOffsetFromEntityInWorldCoords(game.mover(), step.by), false)
 			return nil
 		end)
 	end
-	bind.command(menu, "teleport.nearestVehicle", "Vào xe gần nhất", { note = "Ghế trống trong bán kính 50 m", action = "Lên xe" }, function(): string?
+	bind.command(menu, "teleport.nearestVehicle", "Into the nearest vehicle", { note = "A free seat within 50 m", action = "Get in" }, function(): string?
 		local me = game.me()
 		for _, car in world.nearby("vehicles", me, 50) do
 			for seat = -1, vehicle.getVehicleMaxNumberOfPassengers(car) - 1 do
@@ -269,13 +269,13 @@ function M.build(root: Menu)
 				end
 			end
 		end
-		return "Không có ghế trống nào ở gần"
+		return "No free seat nearby"
 	end)
 	spots(menu)
 	coordinates(menu)
 	icons(menu)
 	interiorsMenu(menu)
-	menu:separator("Địa điểm")
+	menu:separator("Places")
 	-- The trainer's own places first, then the published lists' (data/teleports.luau), the
 	-- kinds both have together.
 	local kinds: { { name: string, places: { teleports.Place } } } = {}
@@ -296,9 +296,9 @@ function M.build(root: Menu)
 		add(kind.name, kind.places)
 	end
 	for _, kind in kinds do
-		local sub = menu:submenu(kind.name, { note = `{#kind.places} địa điểm`, search = #kind.places > 20 })
+		local sub = menu:submenu(kind.name, { note = `{#kind.places} places`, search = #kind.places > 20 })
 		for _, place in kind.places do
-			bind.action(sub, place.name, { action = "Đi" }, function(): string?
+			bind.action(sub, place.name, { action = "Go" }, function(): string?
 				return go(place)
 			end)
 		end

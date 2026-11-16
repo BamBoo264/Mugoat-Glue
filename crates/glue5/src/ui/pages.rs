@@ -131,6 +131,9 @@ pub(super) fn start_page(
                 if icon_button(ui, "★", "Dự án", labels).clicked() {
                     *go = Some(Some(Page::Credits));
                 }
+                if icon_button(ui, "🚗", "Mod xe", labels).clicked() {
+                    *go = Some(Some(Page::Vehicles));
+                }
                 if icon_button(ui, "🛠", "Bản mod", labels).clicked() {
                     *go = Some(Some(Page::Mods));
                 }
@@ -1399,6 +1402,7 @@ mod tests {
     fn status<'a>() -> Status<'a> {
         Status {
             game_dir: Some(Path::new("game")),
+            user_dir: Path::new("user"),
             problem: None,
             started: None,
             last_failure: None,

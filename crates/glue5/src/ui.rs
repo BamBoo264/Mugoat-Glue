@@ -31,6 +31,7 @@ mod perf;
 mod servers;
 mod theme;
 mod touch_editor;
+mod vehicles;
 mod widgets;
 use credits::credits_page;
 use friends::{FriendsPage, friends_page};
@@ -39,6 +40,7 @@ pub use mods::StudioInfo;
 use pages::{settings_page, start_page};
 use servers::{ServersPage, servers_page};
 use touch_editor::{TouchEditorState, touch_editor_page};
+use vehicles::{VehiclesPage, vehicles_page};
 
 use crate::touch::Touch;
 
@@ -59,6 +61,8 @@ pub enum Page {
     Servers,
     /// The mods, GLUE 5 Studio, the mods' log.
     Mods,
+    /// Mod xe: xe bổ sung (Add-on) và xe thay thế (Replace).
+    Vehicles,
 }
 
 /// How the game starts.
@@ -100,6 +104,12 @@ pub enum Action {
     AddDriver,
     /// Delete the GPU driver package with this id.
     RemoveDriver(String),
+    /// Open file dialog to import a vehicle mod (.zip, .rar, .7z, .oiv).
+    ImportVehicleMod,
+    /// Toggle vehicle mod enabled state.
+    ToggleVehicleMod { id: String, enabled: bool },
+    /// Delete a vehicle mod.
+    DeleteVehicleMod { id: String },
 }
 
 /// What a text field of the app's takes: the system keyboard follows it.
@@ -171,6 +181,8 @@ pub struct Started {
 pub struct Status<'a> {
     /// The game's folder, if found.
     pub game_dir: Option<&'a Path>,
+    /// Where user settings, saves, and mods are stored.
+    pub user_dir: &'a Path,
     /// Why it was not (or why it would not start).
     pub problem: Option<&'a str>,
     /// The game runs (and started with these).
@@ -263,6 +275,7 @@ pub struct Ui {
     friends: FriendsPage,
     servers: ServersPage,
     mods: ModsPage,
+    pub vehicles: VehiclesPage,
     /// The last submission drew something (an empty one clears it).
     drawn: bool,
     note: Option<String>,
@@ -341,6 +354,7 @@ impl Ui {
             friends: FriendsPage::default(),
             servers: ServersPage::default(),
             mods: ModsPage::default(),
+            vehicles: VehiclesPage::default(),
             drawn: false,
             note: None,
             scale_edit: None,
@@ -466,7 +480,7 @@ impl Ui {
             Some(Page::Settings) => self.show(self.home),
             // Out of a field, or up a menu, first.
             Some(Page::Mods) if self.mods.back(&self.ctx) => self.repaint(),
-            Some(Page::Credits | Page::Friends | Page::Servers | Page::Mods | Page::TouchEditor) => {
+            Some(Page::Credits | Page::Friends | Page::Servers | Page::Mods | Page::TouchEditor | Page::Vehicles) => {
                 self.show(self.behind)
             }
             _ => {}
@@ -486,7 +500,7 @@ impl Ui {
             self.mods.closed();
         }
         let secondary = |p: Option<Page>| {
-            matches!(p, Some(Page::Credits | Page::Friends | Page::Servers | Page::Mods | Page::TouchEditor))
+            matches!(p, Some(Page::Credits | Page::Friends | Page::Servers | Page::Mods | Page::TouchEditor | Page::Vehicles))
         };
         if secondary(page) && self.page != page {
             // One opened from another goes back where the first came from
@@ -825,6 +839,7 @@ impl Ui {
             Some(Page::Servers) => back = servers_page(&ctx, &mut self.servers, settings, status, &mut actions),
             // Its X closes it, from inside a menu too (back goes up a menu).
             Some(Page::Mods) => go = mods_page(&ctx, &mut self.mods, settings, status).then_some(self.behind),
+            Some(Page::Vehicles) => go = vehicles_page(&ctx, &mut self.vehicles, status, &mut actions).then_some(self.behind),
             Some(Page::TouchEditor) => {
                 let started = status.started.is_some();
                 back = touch_editor_page(&ctx, settings, started, &mut self.touch_preview, &mut self.touch_editor);

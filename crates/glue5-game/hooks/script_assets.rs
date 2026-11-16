@@ -1,5 +1,7 @@
 // Hooks for the runtime's `script_assets.rs` (see ../hooks.rs).
 &[
+    ("decrypt_packfile_aes", "rage::AES::Decrypt(unsigned int, unsigned int, void*, unsigned int)"),
+    ("packfile_reinit", "rage::fiPackfile::ReInit(char const*, bool, void*)"),
     // A script's request for a sound bank, and the bank's loading status
     // as the request reads it: a bank this game data lacks counts as loaded.
     ("script_bank_request", "audScriptAudioEntity::RequestScriptBank(unsigned int, bool, unsigned int)"),

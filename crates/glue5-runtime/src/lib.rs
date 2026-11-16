@@ -19,6 +19,7 @@ pub mod exit;
 mod files;
 pub mod frame_pace;
 pub mod friends;
+pub mod game_mods;
 pub mod game_settings;
 mod gamer_tags;
 mod gamelog;
@@ -48,6 +49,7 @@ mod texts;
 mod threads;
 mod time;
 pub mod tour;
+pub mod vehicle_mods;
 mod trap_site;
 mod upscale;
 pub mod vfs;
@@ -310,7 +312,9 @@ pub fn start(config: Config, gpu: gpu::GpuBackend) -> Result<Game> {
     time::fine_timers();
     // Streaming, the engine's HTTP device serves /game (stream.rs).
     let game_files = config.stream.is_none().then(|| data.clone());
-    let vfs = Vfs::new(game_files, config.user_dir.clone()).with_context(|| format!("không thể mở {}", data.display()))?;
+    let game_mods = std::sync::Arc::new(game_mods::GameMods::load(game_files.as_deref(), &config.user_dir));
+    let vfs = Vfs::with_mods(game_files, config.user_dir.clone(), game_mods)
+        .with_context(|| format!("không thể mở {}", data.display()))?;
     let memory = WasmMemory::reserve()?;
     let runtime = Runtime {
         config,
